@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
-const API = 'http://localhost:5005';
+const API = 'https://e-co-plao-dfkkfhcg8-justme-dd62.vercel.app/';
 
 export default function AdminOrders() {
   const { user } = useAuth();

@@ -17,7 +17,7 @@ export default function Orders() {
 
     const token = localStorage.getItem('authtoken');
 
-    fetch('http://localhost:5005/order', {
+    fetch('https://e-co-plao-dfkkfhcg8-justme-dd62.vercel.app/order', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Package, ShoppingBag, DollarSign, AlertTriangle, Users, CheckCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-const API = 'http://localhost:5005';
+const API = 'https://e-co-plao-dfkkfhcg8-justme-dd62.vercel.app/';
 
 export default function Dashboard() {
   const { products } = useStore();

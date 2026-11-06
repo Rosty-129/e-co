@@ -1,7 +1,7 @@
 import { createContext, useState, useContext, useEffect } from 'react';
 
 const StoreContext = createContext();
-const API_URL = 'http://localhost:5005';
+const API_URL = 'https://e-co-plao-dfkkfhcg8-justme-dd62.vercel.app/';
 
 export const StoreProvider = ({ children }) => {
   const [products, setProducts] = useState([]);
