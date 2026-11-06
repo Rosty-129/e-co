@@ -21,6 +21,9 @@ model User{
   isVerified Boolean @default(false)
   ResetCode String?
   ResetCodeExpires DateTime?
+  pendingEmail String?
+  pendingEmailCode String?
+  pendingEmailExpires DateTime?
   cart Cart?
   order Order[]
   review Review[]

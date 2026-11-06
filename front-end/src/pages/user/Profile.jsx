@@ -1,14 +1,20 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { ArrowLeft, User, Lock, CheckCircle2 } from 'lucide-react';
+import { AuthShell, Field, PrimaryButton, FormError, stepAnim } from '../../components/AuthUI';
 
-// Same host as AuthContext's API_URL (which is '.../auth'), but profile lives at '.../profile'
 const API_BASE = 'https://e-co-plao.vercel.app';
+
+const copy = {
+  account: ['Your profile', 'Update your details. Changing your email requires a confirmation code.'],
+  password: ['Change password', 'Use at least 8 characters. You will stay signed in on this device.'],
+  verifyEmail: ['Confirm new email', 'We sent a 6-digit code to your new address. Enter it below.'],
+};
 
 export default function Profile() {
   const { user, updateUser } = useAuth();
   const token = localStorage.getItem('authtoken');
+
+  const [step, setStep] = useState('account'); // account | password | verifyEmail
 
   const [profile, setProfile] = useState({
     firstname: user?.firstname || '',
@@ -16,24 +22,26 @@ export default function Profile() {
     email: user?.email || '',
     phone: user?.phone || '',
   });
-  const [loading, setLoading] = useState(true);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [profileMsg, setProfileMsg] = useState({ type: '', text: '' });
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [code, setCode] = useState('');
 
   const [passwords, setPasswords] = useState({
     oldpassword: '',
     newpassword: '',
-    confirmpassword: '',
+    confirm: '',
   });
-  const [savingPassword, setSavingPassword] = useState(false);
-  const [passwordMsg, setPasswordMsg] = useState({ type: '', text: '' });
 
-  // Load profile on mount
+  const [errors, setErrors] = useState({});
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
+
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       if (!token) {
-        setLoading(false);
+        setPageLoading(false);
         return;
       }
       try {
@@ -50,10 +58,14 @@ export default function Profile() {
           email: p.email || '',
           phone: p.phone || '',
         });
+        if (p.pendingEmail) {
+          setPendingEmail(p.pendingEmail);
+          setStep('verifyEmail');
+        }
       } catch (err) {
-        if (!cancelled) setProfileMsg({ type: 'error', text: err.message });
+        if (!cancelled) setError(err.message);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setPageLoading(false);
       }
     };
     load();
@@ -62,20 +74,35 @@ export default function Profile() {
     };
   }, [token]);
 
-  const handleProfileChange = (e) => {
-    setProfile({ ...profile, [e.target.name]: e.target.value });
-    setProfileMsg({ type: '', text: '' });
+  const setField = (key) => (e) =>
+    setProfile((prev) => ({ ...prev, [key]: e.target.value }));
+
+  const setPw = (key) => (e) =>
+    setPasswords((prev) => ({ ...prev, [key]: e.target.value }));
+
+  const run = async (fn) => {
+    setError('');
+    setNotice('');
+    setLoading(true);
+    try {
+      await fn();
+    } catch (err) {
+      setError(err.message || 'Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleProfileSubmit = async (e) => {
+  const handleAccount = (e) => {
     e.preventDefault();
-    if (!token) {
-      setProfileMsg({ type: 'error', text: 'You must be logged in.' });
-      return;
+    const next = {};
+    if (!/^[+\d][\d\s-]{5,}$/.test(profile.phone || '')) {
+      next.phone = 'Enter a valid phone number.';
     }
-    setSavingProfile(true);
-    setProfileMsg({ type: '', text: '' });
-    try {
+    setErrors(next);
+    if (Object.keys(next).length) return;
+
+    run(async () => {
       const res = await fetch(`${API_BASE}/profile`, {
         method: 'PATCH',
         headers: {
@@ -92,47 +119,70 @@ export default function Profile() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to update profile');
 
-      // Keep navbar / auth context in sync
       updateUser({
         firstname: profile.firstname,
         lastname: profile.lastname,
-        email: profile.email,
         phone: profile.phone,
       });
 
-      setProfileMsg({ type: 'success', text: 'Profile updated successfully.' });
-    } catch (err) {
-      setProfileMsg({ type: 'error', text: err.message });
-    } finally {
-      setSavingProfile(false);
-    }
+      if (data.pendingEmail) {
+        setPendingEmail(data.pendingEmail);
+        setCode('');
+        setStep('verifyEmail');
+      } else {
+        setNotice('Profile updated.');
+      }
+    });
   };
 
-  const handlePasswordChange = (e) => {
-    setPasswords({ ...passwords, [e.target.name]: e.target.value });
-    setPasswordMsg({ type: '', text: '' });
-  };
-
-  const handlePasswordSubmit = async (e) => {
+  const handleVerifyEmail = (e) => {
     e.preventDefault();
-    if (!token) {
-      setPasswordMsg({ type: 'error', text: 'You must be logged in.' });
-      return;
-    }
-    if (passwords.newpassword !== passwords.confirmpassword) {
-      setPasswordMsg({ type: 'error', text: 'New passwords do not match.' });
-      return;
-    }
-    if (passwords.newpassword.length < 6) {
-      setPasswordMsg({
-        type: 'error',
-        text: 'New password must be at least 6 characters.',
+    run(async () => {
+      const res = await fetch(`${API_BASE}/profile/email/verify`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ code }),
       });
-      return;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Verification failed');
+
+      updateUser({ email: pendingEmail });
+      setProfile((p) => ({ ...p, email: pendingEmail }));
+      setPendingEmail('');
+      setCode('');
+      setNotice('Email updated.');
+      setStep('account');
+    });
+  };
+
+  const handleCancelEmail = () =>
+    run(async () => {
+      await fetch(`${API_BASE}/profile/email/cancel`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setPendingEmail('');
+      setCode('');
+      setNotice('Pending email change cancelled.');
+      setStep('account');
+    });
+
+  const handlePassword = (e) => {
+    e.preventDefault();
+    const next = {};
+    if (passwords.newpassword.length < 8) {
+      next.newpassword = 'Use at least 8 characters.';
     }
-    setSavingPassword(true);
-    setPasswordMsg({ type: '', text: '' });
-    try {
+    if (passwords.newpassword !== passwords.confirm) {
+      next.confirm = 'The passwords do not match.';
+    }
+    setErrors(next);
+    if (Object.keys(next).length) return;
+
+    run(async () => {
       const res = await fetch(`${API_BASE}/profile/password`, {
         method: 'PATCH',
         headers: {
@@ -146,195 +196,223 @@ export default function Profile() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to change password');
-      setPasswords({ oldpassword: '', newpassword: '', confirmpassword: '' });
-      setPasswordMsg({ type: 'success', text: 'Password updated successfully.' });
-    } catch (err) {
-      setPasswordMsg({ type: 'error', text: err.message });
-    } finally {
-      setSavingPassword(false);
-    }
+      setPasswords({ oldpassword: '', newpassword: '', confirm: '' });
+      setNotice('Password updated.');
+      setStep('account');
+    });
   };
 
-  if (loading) {
+  if (pageLoading) {
     return (
-      <div className="max-w-3xl mx-auto py-16 text-center text-gray-500 text-sm">
+      <div className="max-w-3xl mx-auto py-16 text-center text-neutral-500 text-sm">
         Loading profile…
       </div>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <Link
-        to="/"
-        className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-black mb-6"
-      >
-        <ArrowLeft size={16} /> Back to home
-      </Link>
-
-      <h1 className="text-2xl font-medium mb-6 text-black">My Profile</h1>
-
-      <div className="space-y-6">
-        {/* --- Profile info --- */}
-        <form
-          onSubmit={handleProfileSubmit}
-          className="border-2 border-black rounded-lg p-6 bg-white space-y-4"
-        >
-          <div className="flex items-center gap-2 border-b border-black/10 pb-3">
-            <User size={18} />
-            <h2 className="font-medium text-lg text-black">Account details</h2>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-black mb-1">
-                First Name
-              </label>
-              <input
-                type="text"
-                name="firstname"
+    <AuthShell title={copy[step][0]} text={copy[step][1]}>
+      <div key={step} data-auth-step style={stepAnim}>
+        {step === 'account' && (
+          <form onSubmit={handleAccount} className="space-y-5">
+            <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">
+              Account details
+            </h2>
+            <FormError>{error}</FormError>
+            {notice && (
+              <p className="text-sm font-medium text-neutral-800" role="status">
+                {notice}
+              </p>
+            )}
+            <div className="grid sm:grid-cols-2 gap-5">
+              <Field
+                id="firstname"
+                label="First name"
                 required
+                autoComplete="given-name"
                 value={profile.firstname}
-                onChange={handleProfileChange}
-                className="w-full p-2 border-2 border-black rounded bg-white text-sm text-gray-800 focus:outline-none"
+                onChange={setField('firstname')}
               />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-black mb-1">
-                Last Name
-              </label>
-              <input
-                type="text"
-                name="lastname"
+              <Field
+                id="lastname"
+                label="Last name"
                 required
+                autoComplete="family-name"
                 value={profile.lastname}
-                onChange={handleProfileChange}
-                className="w-full p-2 border-2 border-black rounded bg-white text-sm text-gray-800 focus:outline-none"
+                onChange={setField('lastname')}
               />
             </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-black mb-1">
-              Email Address
-            </label>
-            <input
+            <Field
+              id="email"
+              label="Email"
               type="email"
-              name="email"
               required
+              autoComplete="email"
               value={profile.email}
-              onChange={handleProfileChange}
-              className="w-full p-2 border-2 border-black rounded bg-white text-sm text-gray-800 focus:outline-none"
+              onChange={setField('email')}
+              hint="Changing this will send a confirmation code to the new address."
             />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-black mb-1">
-              Phone Number
-            </label>
-            <input
-              type="text"
-              name="phone"
-              placeholder="e.g. +1 555-0199"
-              value={profile.phone}
-              onChange={handleProfileChange}
-              className="w-full p-2 border-2 border-black rounded bg-white text-sm text-gray-800 focus:outline-none"
-            />
-          </div>
-
-          {profileMsg.text && (
-            <p
-              className={`text-xs font-medium flex items-center gap-1.5 ${
-                profileMsg.type === 'success' ? 'text-green-700' : 'text-red-600'
-              }`}
-            >
-              {profileMsg.type === 'success' && <CheckCircle2 size={14} />}
-              {profileMsg.text}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={savingProfile}
-            className="w-full sm:w-auto px-6 py-2.5 bg-black text-white font-medium rounded text-sm border-2 border-black hover:bg-white hover:text-black transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {savingProfile ? 'Saving…' : 'Save changes'}
-          </button>
-        </form>
-
-        {/* --- Change password --- */}
-        <form
-          onSubmit={handlePasswordSubmit}
-          className="border-2 border-black rounded-lg p-6 bg-white space-y-4"
-        >
-          <div className="flex items-center gap-2 border-b border-black/10 pb-3">
-            <Lock size={18} />
-            <h2 className="font-medium text-lg text-black">Change password</h2>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-black mb-1">
-              Current Password
-            </label>
-            <input
-              type="password"
-              name="oldpassword"
+            <Field
+              id="phone"
+              label="Phone"
+              type="tel"
               required
-              value={passwords.oldpassword}
-              onChange={handlePasswordChange}
-              className="w-full p-2 border-2 border-black rounded bg-white text-sm text-gray-800 focus:outline-none"
+              autoComplete="tel"
+              value={profile.phone}
+              onChange={setField('phone')}
+              placeholder="+213 555 000 000"
+              error={errors.phone}
             />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-black mb-1">
-                New Password
-              </label>
-              <input
-                type="password"
-                name="newpassword"
-                required
-                value={passwords.newpassword}
-                onChange={handlePasswordChange}
-                className="w-full p-2 border-2 border-black rounded bg-white text-sm text-gray-800 focus:outline-none"
-              />
+            <PrimaryButton type="submit" loading={loading}>
+              Save changes
+            </PrimaryButton>
+            <div className="flex items-center justify-between text-sm">
+              <button
+                type="button"
+                onClick={() => {
+                  setErrors({});
+                  setError('');
+                  setNotice('');
+                  setPasswords({ oldpassword: '', newpassword: '', confirm: '' });
+                  setStep('password');
+                }}
+                className="text-neutral-500 hover:text-neutral-900 transition-colors"
+              >
+                Change password
+              </button>
+              {pendingEmail && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError('');
+                    setNotice('');
+                    setStep('verifyEmail');
+                  }}
+                  className="text-neutral-500 hover:text-neutral-900 transition-colors"
+                >
+                  Resume email change
+                </button>
+              )}
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-black mb-1">
-                Confirm New Password
-              </label>
-              <input
-                type="password"
-                name="confirmpassword"
-                required
-                value={passwords.confirmpassword}
-                onChange={handlePasswordChange}
-                className="w-full p-2 border-2 border-black rounded bg-white text-sm text-gray-800 focus:outline-none"
-              />
-            </div>
-          </div>
+          </form>
+        )}
 
-          {passwordMsg.text && (
-            <p
-              className={`text-xs font-medium flex items-center gap-1.5 ${
-                passwordMsg.type === 'success' ? 'text-green-700' : 'text-red-600'
-              }`}
-            >
-              {passwordMsg.type === 'success' && <CheckCircle2 size={14} />}
-              {passwordMsg.text}
+        {step === 'password' && (
+          <form onSubmit={handlePassword} className="space-y-5">
+            <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">
+              Change password
+            </h2>
+            <FormError>{error}</FormError>
+            {notice && (
+              <p className="text-sm font-medium text-neutral-800" role="status">
+                {notice}
+              </p>
+            )}
+            <Field
+              id="oldpassword"
+              label="Current password"
+              type="password"
+              required
+              autoComplete="current-password"
+              value={passwords.oldpassword}
+              onChange={setPw('oldpassword')}
+            />
+            <Field
+              id="newpassword"
+              label="New password"
+              type="password"
+              required
+              autoComplete="new-password"
+              value={passwords.newpassword}
+              onChange={setPw('newpassword')}
+              error={errors.newpassword}
+              hint="At least 8 characters."
+            />
+            <Field
+              id="confirm"
+              label="Confirm new password"
+              type="password"
+              required
+              autoComplete="new-password"
+              value={passwords.confirm}
+              onChange={setPw('confirm')}
+              error={errors.confirm}
+            />
+            <PrimaryButton type="submit" loading={loading}>
+              Update password
+            </PrimaryButton>
+            <p className="text-sm text-neutral-500 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setErrors({});
+                  setError('');
+                  setNotice('');
+                  setStep('account');
+                }}
+                className="font-medium text-neutral-900 underline underline-offset-4"
+              >
+                Back to account
+              </button>
             </p>
-          )}
+          </form>
+        )}
 
-          <button
-            type="submit"
-            disabled={savingPassword}
-            className="w-full sm:w-auto px-6 py-2.5 bg-black text-white font-medium rounded text-sm border-2 border-black hover:bg-white hover:text-black transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {savingPassword ? 'Updating…' : 'Update password'}
-          </button>
-        </form>
+        {step === 'verifyEmail' && (
+          <form onSubmit={handleVerifyEmail} className="space-y-5">
+            <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">
+              Confirm your new email
+            </h2>
+            <p className="text-sm text-neutral-500 -mt-2">
+              We sent a 6-digit code to{' '}
+              <span className="font-medium text-neutral-800">{pendingEmail}</span>. It expires in 15
+              minutes.
+            </p>
+            <FormError>{error}</FormError>
+            {notice && (
+              <p className="text-sm font-medium text-neutral-800" role="status">
+                {notice}
+              </p>
+            )}
+            <Field
+              id="code"
+              label="6-digit code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              required
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+              placeholder="000000"
+              style={{ letterSpacing: '0.4em' }}
+            />
+            <PrimaryButton type="submit" loading={loading}>
+              Confirm email
+            </PrimaryButton>
+            <div className="flex items-center justify-between text-sm">
+              <button
+                type="button"
+                onClick={handleCancelEmail}
+                className="text-neutral-500 hover:text-neutral-900 transition-colors"
+              >
+                Cancel change
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setErrors({});
+                  setError('');
+                  setNotice('');
+                  setStep('account');
+                }}
+                className="text-neutral-500 hover:text-neutral-900 transition-colors"
+              >
+                Back to account
+              </button>
+            </div>
+          </form>
+        )}
       </div>
-    </div>
+    </AuthShell>
   );
 }
