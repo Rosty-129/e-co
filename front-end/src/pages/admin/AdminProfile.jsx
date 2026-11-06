@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
-const API = 'https://e-co-plao-dfkkfhcg8-justme-dd62.vercel.app/';
+const API = 'https://e-co-plao-dfkkfhcg8-justme-dd62.vercel.app';
 
 export default function AdminProfile() {
   const { user } = useAuth();
