@@ -19,7 +19,7 @@ export default function ProductReviews({ productId }) {
   const [editText, setEditText] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
-  // ── Load reviews for this product ─────────────────────────
+  // ── Load all reviews for this product (every user's) ──────
   const loadReviews = useCallback(async () => {
     try {
       setLoading(true);
@@ -28,8 +28,7 @@ export default function ProductReviews({ productId }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to load reviews');
       const all = Array.isArray(data) ? data : data.newone || [];
-      // Safety net in case backend ignores the query param:
-      setReviews(all.filter((r) => Number(r.productid) === Number(productId)));
+      setReviews(all);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -194,7 +193,7 @@ export default function ProductReviews({ productId }) {
           </p>
         )}
 
-        {/* List */}
+        {/* List — every user's reviews */}
         {loading ? (
           <p className="text-neutral-500">Loading reviews…</p>
         ) : reviews.length === 0 ? (
