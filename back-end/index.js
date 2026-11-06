@@ -13,9 +13,24 @@ import reviewRoutes from "./routes/reviewroute.js";
 
 const app = express();
 
-app.use(cors(
-));
+// ✅ CORS — must be BEFORE all routes
+app.use(cors({
+  origin: [
+    "https://e-co-ochre.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000",
+  ],
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
+
 app.use(express.json());
+
+// Health check — hit this first to verify the function is alive
+app.get("/", (req, res) => {
+  res.json({ ok: true, message: "API is running" });
+});
 
 // Authentication
 app.use("/auth", authRoutes);
@@ -44,10 +59,6 @@ app.use("/images", imagesRoutes);
 // Admin dashboard
 app.use("/dashboard", dashboardRoutes);
 
-const PORT = process.env.PORT || 5005;
-
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
-
+// ❌ NO app.listen() — it crashes Vercel serverless
+// ✅ Just export the app
 export default app;
