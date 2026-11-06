@@ -1,0 +1,20 @@
+version: 2
+
+updates:
+  # Frontend
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+
+  # Backend
+  - package-ecosystem: npm
+    directory: "/back-end"
+    schedule:
+      interval: weekly
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
