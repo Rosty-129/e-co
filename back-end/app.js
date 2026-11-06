@@ -14,16 +14,6 @@ import reviewRoutes from "./routes/reviewroute.js";
 const app = express();
 
 app.use(cors(
-
-{
-  origin: [
-    "https://e-1xt38joh8-justme-dd62.vercel.app",
-  ],
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-}
-
 ));
 app.use(express.json());
 
