@@ -17,7 +17,7 @@ export default function Orders() {
 
     const token = localStorage.getItem('authtoken');
 
-    fetch('https://e-co-plao-dfkkfhcg8-justme-dd62.vercel.app/order', {
+    fetch('https://e-co-plao.vercel.app/order', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
