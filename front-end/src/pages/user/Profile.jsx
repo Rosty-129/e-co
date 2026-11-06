@@ -5,16 +5,15 @@ import { AuthShell, Field, PrimaryButton, FormError, stepAnim } from '../../comp
 const API_BASE = 'https://e-co-plao.vercel.app';
 
 const copy = {
-  account: ['Your profile', 'Update your details. Changing your email requires a confirmation code.'],
-  password: ['Change password', 'Use at least 8 characters. You will stay signed in on this device.'],
-  verifyEmail: ['Confirm new email', 'We sent a 6-digit code to your new address. Enter it below.'],
+  account: ['Your profile', 'Update your details. Changing your email requires your current password.'],
+  password: ['Change password', 'Use at least 8 characters.'],
 };
 
 export default function Profile() {
   const { user, updateUser } = useAuth();
   const token = localStorage.getItem('authtoken');
 
-  const [step, setStep] = useState('account'); // account | password | verifyEmail
+  const [step, setStep] = useState('account');
 
   const [profile, setProfile] = useState({
     firstname: user?.firstname || '',
@@ -22,8 +21,8 @@ export default function Profile() {
     email: user?.email || '',
     phone: user?.phone || '',
   });
-  const [pendingEmail, setPendingEmail] = useState('');
-  const [code, setCode] = useState('');
+  const [originalEmail, setOriginalEmail] = useState(user?.email || '');
+  const [currentPassword, setCurrentPassword] = useState('');
 
   const [passwords, setPasswords] = useState({
     oldpassword: '',
@@ -58,10 +57,7 @@ export default function Profile() {
           email: p.email || '',
           phone: p.phone || '',
         });
-        if (p.pendingEmail) {
-          setPendingEmail(p.pendingEmail);
-          setStep('verifyEmail');
-        }
+        setOriginalEmail(p.email || '');
       } catch (err) {
         if (!cancelled) setError(err.message);
       } finally {
@@ -73,6 +69,9 @@ export default function Profile() {
       cancelled = true;
     };
   }, [token]);
+
+  const emailChanged =
+    profile.email.trim().toLowerCase() !== originalEmail.trim().toLowerCase();
 
   const setField = (key) => (e) =>
     setProfile((prev) => ({ ...prev, [key]: e.target.value }));
@@ -99,22 +98,28 @@ export default function Profile() {
     if (!/^[+\d][\d\s-]{5,}$/.test(profile.phone || '')) {
       next.phone = 'Enter a valid phone number.';
     }
+    if (emailChanged && currentPassword.length === 0) {
+      next.currentPassword = 'Enter your current password to change your email.';
+    }
     setErrors(next);
     if (Object.keys(next).length) return;
 
     run(async () => {
+      const body = {
+        firstname: profile.firstname,
+        lastname: profile.lastname,
+        email: profile.email,
+        phone: profile.phone,
+      };
+      if (emailChanged) body.currentPassword = currentPassword;
+
       const res = await fetch(`${API_BASE}/profile`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          firstname: profile.firstname,
-          lastname: profile.lastname,
-          email: profile.email,
-          phone: profile.phone,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to update profile');
@@ -122,53 +127,14 @@ export default function Profile() {
       updateUser({
         firstname: profile.firstname,
         lastname: profile.lastname,
+        email: profile.email,
         phone: profile.phone,
       });
-
-      if (data.pendingEmail) {
-        setPendingEmail(data.pendingEmail);
-        setCode('');
-        setStep('verifyEmail');
-      } else {
-        setNotice('Profile updated.');
-      }
+      setOriginalEmail(profile.email);
+      setCurrentPassword('');
+      setNotice(emailChanged ? 'Profile updated, including email.' : 'Profile updated.');
     });
   };
-
-  const handleVerifyEmail = (e) => {
-    e.preventDefault();
-    run(async () => {
-      const res = await fetch(`${API_BASE}/profile/email/verify`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ code }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Verification failed');
-
-      updateUser({ email: pendingEmail });
-      setProfile((p) => ({ ...p, email: pendingEmail }));
-      setPendingEmail('');
-      setCode('');
-      setNotice('Email updated.');
-      setStep('account');
-    });
-  };
-
-  const handleCancelEmail = () =>
-    run(async () => {
-      await fetch(`${API_BASE}/profile/email/cancel`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setPendingEmail('');
-      setCode('');
-      setNotice('Pending email change cancelled.');
-      setStep('account');
-    });
 
   const handlePassword = (e) => {
     e.preventDefault();
@@ -250,8 +216,21 @@ export default function Profile() {
               autoComplete="email"
               value={profile.email}
               onChange={setField('email')}
-              hint="Changing this will send a confirmation code to the new address."
+              hint="Changing your email requires your current password."
             />
+            {emailChanged && (
+              <Field
+                id="currentPassword"
+                label="Current password"
+                type="password"
+                required
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                error={errors.currentPassword}
+                hint="Required to confirm your email change."
+              />
+            )}
             <Field
               id="phone"
               label="Phone"
@@ -266,7 +245,7 @@ export default function Profile() {
             <PrimaryButton type="submit" loading={loading}>
               Save changes
             </PrimaryButton>
-            <div className="flex items-center justify-between text-sm">
+            <p className="text-sm text-neutral-500 text-center">
               <button
                 type="button"
                 onClick={() => {
@@ -276,24 +255,11 @@ export default function Profile() {
                   setPasswords({ oldpassword: '', newpassword: '', confirm: '' });
                   setStep('password');
                 }}
-                className="text-neutral-500 hover:text-neutral-900 transition-colors"
+                className="font-medium text-neutral-900 underline underline-offset-4"
               >
                 Change password
               </button>
-              {pendingEmail && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError('');
-                    setNotice('');
-                    setStep('verifyEmail');
-                  }}
-                  className="text-neutral-500 hover:text-neutral-900 transition-colors"
-                >
-                  Resume email change
-                </button>
-              )}
-            </div>
+            </p>
           </form>
         )}
 
@@ -355,61 +321,6 @@ export default function Profile() {
                 Back to account
               </button>
             </p>
-          </form>
-        )}
-
-        {step === 'verifyEmail' && (
-          <form onSubmit={handleVerifyEmail} className="space-y-5">
-            <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">
-              Confirm your new email
-            </h2>
-            <p className="text-sm text-neutral-500 -mt-2">
-              We sent a 6-digit code to{' '}
-              <span className="font-medium text-neutral-800">{pendingEmail}</span>. It expires in 15
-              minutes.
-            </p>
-            <FormError>{error}</FormError>
-            {notice && (
-              <p className="text-sm font-medium text-neutral-800" role="status">
-                {notice}
-              </p>
-            )}
-            <Field
-              id="code"
-              label="6-digit code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              required
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-              placeholder="000000"
-              style={{ letterSpacing: '0.4em' }}
-            />
-            <PrimaryButton type="submit" loading={loading}>
-              Confirm email
-            </PrimaryButton>
-            <div className="flex items-center justify-between text-sm">
-              <button
-                type="button"
-                onClick={handleCancelEmail}
-                className="text-neutral-500 hover:text-neutral-900 transition-colors"
-              >
-                Cancel change
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setErrors({});
-                  setError('');
-                  setNotice('');
-                  setStep('account');
-                }}
-                className="text-neutral-500 hover:text-neutral-900 transition-colors"
-              >
-                Back to account
-              </button>
-            </div>
           </form>
         )}
       </div>
