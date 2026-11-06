@@ -1,8 +1,7 @@
 import { createContext, useContext, useState } from 'react';
 
 const AuthContext = createContext(null);
-const API_URL = 'https://e-co-plao-dfkkfhcg8-justme-dd62.vercel.app/auth';
-
+const API_URL = 'https://e-co-plao.vercel.app/auth';
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../context/StoreContext';
 
-const API = 'https://e-co-plao-dfkkfhcg8-justme-dd62.vercel.app';
+const API = 'https://e-co-plao.vercel.app';
 
 export default function ProductNew() {
   const { categories } = useStore();

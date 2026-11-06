@@ -1,6 +1,6 @@
 import { useStore } from '../../context/StoreContext';
 
-const API = 'https://e-co-plao-dfkkfhcg8-justme-dd62.vercel.app';
+const API = 'https://e-co-plao.vercel.app';
 
 export default function Inventory() {
   const { products } = useStore();

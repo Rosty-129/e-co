@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const API = 'https://e-co-plao-dfkkfhcg8-justme-dd62.vercel.app';
+const API = 'https://e-co-plao.vercel.app';
 
 export default function AdminCategoryNew() {
   const navigate = useNavigate();
