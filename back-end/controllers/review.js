@@ -1,8 +1,6 @@
 import { PrismaClient } from "@prisma/client";
-import Filter from "bad-words"; // Make sure to run: npm install bad-words
 
 const prisma = new PrismaClient();
-const filter = new Filter(); 
 
 export const createreview = async (req, res) => {
   try {
@@ -13,14 +11,11 @@ export const createreview = async (req, res) => {
       return res.status(400).json({ message: "text and productid are required" });
     }
 
-    // FIX: Clean the text before saving to prevent unmoderated content
-    const cleanText = filter.clean(text);
-
     await prisma.Review.create({
       data: {
         userid,
-        text: cleanText, 
-        productid: Number(productid), 
+        text,
+        productid: Number(productid),
       },
     });
 
@@ -34,13 +29,13 @@ export const createreview = async (req, res) => {
 export const updatereview = async (req, res) => {
   try {
     const userid = req.user.id;
-    const reviewid = Number(req.params.id); 
+    const reviewid = Number(req.params.id);
     const { text } = req.body;
 
     const review = await prisma.Review.findFirst({
       where: {
         id: reviewid,
-        userid, // This secures against IDOR (users can only edit their own reviews)
+        userid,
       },
     });
 
@@ -48,12 +43,9 @@ export const updatereview = async (req, res) => {
       return res.status(404).json({ message: "review not found" });
     }
 
-    // FIX: Clean the text before saving
-    const cleanText = filter.clean(text);
-
     await prisma.Review.update({
       where: { id: reviewid },
-      data: { text: cleanText },
+      data: { text },
     });
 
     return res.status(200).json({ message: "review updated" });
@@ -71,7 +63,7 @@ export const deletereview = async (req, res) => {
     const review = await prisma.Review.findFirst({
       where: {
         id: reviewid,
-        userid, // This secures against IDOR
+        userid,
       },
     });
 
@@ -93,7 +85,7 @@ export const deletereview = async (req, res) => {
 export const getallmyreviews = async (req, res) => {
   try {
     const userid = req.user.id;
-    const { productid } = req.query; 
+    const { productid } = req.query;
 
     const reviews = await prisma.Review.findMany({
       where: {
@@ -116,9 +108,7 @@ export const getallreviews = async (req, res) => {
     const reviews = await prisma.Review.findMany({
       where: productid ? { productid: Number(productid) } : {},
       include: {
-        // FIX: Removed lastname. Now it only pulls the firstname from the database.
-        // The data leak is closed.
-        user: { select: { firstname: true } }, 
+        user: { select: { firstname: true } },
       },
       orderBy: { createdAt: "desc" },
     });
