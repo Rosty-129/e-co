@@ -39,7 +39,7 @@ export function AuthProvider({ children }) {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Registration failed');
-    return data; 
+    return data;
   };
 
   const verifyEmail = async (payload) => {
@@ -100,9 +100,19 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  // Merge partial updates into the current user + persist to localStorage
+  // so the navbar reflects changes (firstname/email/etc.) immediately.
+  const updateUser = (partial) => {
+    setUser((prev) => {
+      const next = { ...(prev || {}), ...partial };
+      localStorage.setItem('user', JSON.stringify(next));
+      return next;
+    });
+  };
+
   return (
-    <AuthContext.Provider value={{ 
-      user, login, register, verifyEmail, resendCode, forgotPassword, resetPassword, logout 
+    <AuthContext.Provider value={{
+      user, login, register, verifyEmail, resendCode, forgotPassword, resetPassword, logout, updateUser
     }}>
       {children}
     </AuthContext.Provider>

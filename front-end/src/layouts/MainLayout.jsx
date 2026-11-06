@@ -31,6 +31,7 @@ export default function MainLayout() {
     { to: '/', label: 'Home', end: true },
     { to: '/products', label: 'Products' },
     ...(user ? [{ to: '/orders', label: 'Orders' }] : []),
+    ...(user ? [{ to: '/profile', label: 'Profile' }] : []),
     ...(user?.role === 'ADMIN' ? [{ to: '/admin', label: 'Admin' }] : []),
   ];
 
@@ -129,9 +130,18 @@ export default function MainLayout() {
 
             {user ? (
               <div className="flex items-center gap-2 pl-2">
-                <span className="hidden sm:block text-sm font-medium text-neutral-600">
-                  {user.firstname}
-                </span>
+                <Link
+                  to="/profile"
+                  className="hidden sm:flex items-center gap-2 rounded-full hover:bg-neutral-200/70 px-2 py-1 transition-colors"
+                  title="My profile"
+                >
+                  <span className="grid place-items-center h-7 w-7 rounded-full bg-neutral-800 text-white text-xs font-semibold">
+                    {(user.firstname?.[0] || user.email?.[0] || 'U').toUpperCase()}
+                  </span>
+                  <span className="text-sm font-medium text-neutral-600">
+                    {user.firstname}
+                  </span>
+                </Link>
                 <button
                   onClick={logout}
                   className="rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium hover:border-neutral-800 transition-colors"

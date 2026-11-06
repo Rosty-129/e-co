@@ -12,6 +12,7 @@ import Products from './pages/user/Products';
 import ProductDetail from './pages/user/ProductDetail';
 import Checkout from './pages/user/Checkout';
 import Orders from './pages/user/Orders';
+import Profile from './pages/user/Profile'; // NEW
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 
@@ -51,6 +52,10 @@ export default function App() {
                   <Route
                     path="/orders"
                     element={<ProtectedRoute><Orders /></ProtectedRoute>}
+                  />
+                  <Route
+                    path="/profile"
+                    element={<ProtectedRoute><Profile /></ProtectedRoute>} // NEW
                   />
                 </Route>
 
