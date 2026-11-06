@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 
 import authRoutes from "./routes/authroutes.js";
 import cartRoutes from "./routes/cartroute.js";
@@ -13,7 +14,13 @@ import reviewRoutes from "./routes/reviewroute.js";
 
 const app = express();
 
-// ✅ CORS — must be BEFORE all routes
+// Remove Express framework identification
+app.disable("x-powered-by");
+
+// Security headers
+app.use(helmet());
+
+// CORS configuration
 app.use(cors({
   origin: [
     "https://e-co-ochre.vercel.app",
@@ -25,11 +32,15 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"],
 }));
 
+// Parse JSON requests
 app.use(express.json());
 
-// Health check — hit this first to verify the function is alive
+// Health check
 app.get("/", (req, res) => {
-  res.json({ ok: true, message: "API is running" });
+  res.json({
+    ok: true,
+    message: "API is running"
+  });
 });
 
 // Authentication
@@ -59,6 +70,5 @@ app.use("/images", imagesRoutes);
 // Admin dashboard
 app.use("/dashboard", dashboardRoutes);
 
-// ❌ NO app.listen() — it crashes Vercel serverless
-// ✅ Just export the app
+// Export for Vercel serverless
 export default app;
