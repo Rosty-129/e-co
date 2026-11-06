@@ -1,7 +1,7 @@
-import { createContext, useState, useContext, useEffect } from 'react';
+import { createContext, useState, useContext, useEffect, useCallback } from 'react';
 
 const StoreContext = createContext();
-const API_URL = 'https://e-co-plao.vercel.app/';
+const API_URL = 'https://e-co-plao.vercel.app';
 
 export const StoreProvider = ({ children }) => {
   const [products, setProducts] = useState([]);
@@ -9,46 +9,69 @@ export const StoreProvider = ({ children }) => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // ── Reusable fetchers (exposed to consumers) ──────────────
+  const fetchCategories = useCallback(async () => {
+    const res = await fetch(`${API_URL}/category`);
+    if (!res.ok) throw new Error('Failed to load categories');
+    const data = await res.json();
+    setCategories(data);
+    return data;
+  }, []);
+
+  const fetchProducts = useCallback(async () => {
+    const res = await fetch(`${API_URL}/product`);
+    if (!res.ok) throw new Error('Failed to load products');
+    const data = await res.json();
+    setProducts(data);
+    return data;
+  }, []);
+
+  // ── Initial load ──────────────────────────────────────────
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [prodRes, catRes] = await Promise.all([
-          fetch(`${API_URL}/product`),
-          fetch(`${API_URL}/category`)
-        ]);
-
-        if (prodRes.ok) setProducts(await prodRes.json());
-        if (catRes.ok) setCategories(await catRes.json());
+        await Promise.all([fetchProducts(), fetchCategories()]);
       } catch (err) {
-        console.error("Failed to fetch store data:", err);
+        console.error('Failed to fetch store data:', err);
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, []);
+  }, [fetchProducts, fetchCategories]);
 
+  // ── Orders ────────────────────────────────────────────────
   const addOrder = async (orderData) => {
     const token = localStorage.getItem('authtoken');
     const res = await fetch(`${API_URL}/order`, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }) // Passes token if your backend needs it
+        ...(token && { Authorization: `Bearer ${token}` }),
       },
-      body: JSON.stringify(orderData)
+      body: JSON.stringify(orderData),
     });
-    
+
     const newOrder = await res.json();
     if (!res.ok) throw new Error(newOrder.message || 'Failed to place order');
-    
-    setOrders(prev => [...prev, newOrder]);
+
+    setOrders((prev) => [...prev, newOrder]);
     return newOrder;
   };
 
   return (
-    <StoreContext.Provider value={{ products, categories, orders, loading, addOrder }}>
+    <StoreContext.Provider
+      value={{
+        products,
+        categories,
+        orders,
+        loading,
+        addOrder,
+        fetchCategories,   // ← new
+        fetchProducts,     // ← new
+      }}
+    >
       {children}
     </StoreContext.Provider>
   );

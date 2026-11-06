@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useStore } from '../../context/StoreContext';
 
 const API = 'https://e-co-plao.vercel.app';
 
 export default function AdminCategoryNew() {
   const navigate = useNavigate();
+  const { fetchCategories } = useStore();
   const [form, setForm] = useState({ name: '', description: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -36,7 +38,13 @@ export default function AdminCategoryNew() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to create category');
 
-      setSuccess(`Category "${data.category.name}" created!`);
+      // Handle both { category: {...} } and bare { id, name, ... } responses
+      const created = data.category ?? data;
+
+      // Refresh store so the new category appears everywhere (product form, shop, etc.)
+      await fetchCategories();
+
+      setSuccess(`Category "${created.name}" created!`);
       setForm({ name: '', description: '' });
     } catch (err) {
       setError(err.message);

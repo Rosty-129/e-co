@@ -5,7 +5,7 @@ import { useStore } from '../../context/StoreContext';
 const API = 'https://e-co-plao.vercel.app';
 
 export default function ProductNew() {
-  const { categories } = useStore();
+  const { categories, fetchProducts, fetchCategories } = useStore();
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
@@ -18,12 +18,18 @@ export default function ProductNew() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Belt-and-suspenders: pull fresh categories on mount in case
+  // another admin added one in a different tab / session.
+  useEffect(() => {
+    fetchCategories().catch(console.error);
+  }, [fetchCategories]);
+
   // Auto-select first category once loaded
   useEffect(() => {
     if (categories.length > 0 && !formData.categoryid) {
       setFormData((f) => ({ ...f, categoryid: categories[0].id }));
     }
-  }, [categories]);
+  }, [categories, formData.categoryid]);
 
   const handleCategoryChange = (e) => {
     const val = e.target.value;
@@ -51,22 +57,31 @@ export default function ProductNew() {
     setLoading(true);
     try {
       const token = localStorage.getItem('authtoken');
+
+      // NOTE: if your Prisma Category.id is a String (cuid/uuid), remove
+      // Number() around categoryid. Keep Number() only for Int ids.
+      const payload = {
+        name: formData.name,
+        description: formData.description,
+        categoryid: formData.categoryid,
+        price: Number(formData.price),
+        Stock: Number(formData.Stock),
+      };
+
       const res = await fetch(`${API}/product`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          name: formData.name,
-          description: formData.description,
-          categoryid: Number(formData.categoryid),
-          price: Number(formData.price),
-          Stock: Number(formData.Stock),
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to create product');
+
+      // Refresh products so inventory / shop see the new one immediately
+      await fetchProducts();
+
       navigate('/admin/inventory');
     } catch (err) {
       setError(err.message);
