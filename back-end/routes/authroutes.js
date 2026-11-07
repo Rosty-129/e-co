@@ -6,9 +6,11 @@ import {
     verifycode,
     login,
     forgotpassword,
-    verifyinglogin
+    verifyinglogin,
+    logout
 } from "../controllers/registerandlogin.js";
 
+import { verify } from "../middleware/jwt.js";
 import { validate } from "../middleware/validate.js";
 
 import {
@@ -29,6 +31,7 @@ import {
 
 const router = express.Router();
 
+// REGISTER
 router.post(
     "/register",
     registerLimiter,
@@ -36,6 +39,7 @@ router.post(
     register
 );
 
+// VERIFY EMAIL
 router.post(
     "/verify",
     verifyEmailLimiter,
@@ -43,6 +47,7 @@ router.post(
     verifycode
 );
 
+// LOGIN
 router.post(
     "/login",
     loginLimiter,
@@ -50,6 +55,7 @@ router.post(
     login
 );
 
+// FORGOT PASSWORD
 router.post(
     "/forgot-password",
     forgotPasswordLimiter,
@@ -57,11 +63,31 @@ router.post(
     forgotpassword
 );
 
+// RESET PASSWORD
 router.post(
     "/reset-password",
     resetPasswordLimiter,
     validate(resetPasswordSchema),
     verifyinglogin
+);
+
+// CHECK ACTIVITY AND EXTEND SESSION
+router.post(
+    "/activity",
+    verify,
+    (req, res) => {
+        return res.status(200).json({
+            success: true,
+            message: "Session active"
+        });
+    }
+);
+
+// LOGOUT
+router.post(
+    "/logout",
+    verify,
+    logout
 );
 
 export default router;

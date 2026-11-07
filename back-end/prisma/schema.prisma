@@ -1,3 +1,4 @@
+
 generator client {
   provider = "prisma-client-js"
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
@@ -8,7 +9,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User{
+model User {
   id Int @id @default(autoincrement())
   email String @unique
   password String
@@ -24,27 +25,42 @@ model User{
   pendingEmail String?
   pendingEmailCode String?
   pendingEmailExpires DateTime?
+
   cart Cart?
   order Order[]
   review Review[]
+  sessions Session[]
+}
+
+model Session {
+  id String @id @default(uuid())
+  userId Int
+  expiresAt DateTime
+  absoluteExpiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Category {
-id Int @id @default(autoincrement())
-name String
-description String?
-createdAt DateTime @default(now())
-updatedAt DateTime @updatedAt
-products Product[]
-}
-
-model Product{
   id Int @id @default(autoincrement())
   name String
   description String?
   createdAt DateTime @default(now())
-updatedAt DateTime @updatedAt
-  category Category @relation(fields: [categoryid],references: [id])
+  updatedAt DateTime @updatedAt
+  products Product[]
+}
+
+model Product {
+  id Int @id @default(autoincrement())
+  name String
+  description String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  category Category @relation(fields: [categoryid], references: [id])
   categoryid Int
   price Int
   cartitem CartItem[]
@@ -54,21 +70,20 @@ updatedAt DateTime @updatedAt
   review Review[]
 }
 
-
 model Cart {
   id Int @id @default(autoincrement())
-  user User @relation(fields: [userid] , references: [id])
+  user User @relation(fields: [userid], references: [id])
   userid Int @unique
   createdAt DateTime @default(now())
-updatedAt DateTime @updatedAt
-cartitem CartItem[]
+  updatedAt DateTime @updatedAt
+  cartitem CartItem[]
 }
 
 model CartItem {
   id Int @id @default(autoincrement())
-  product Product @relation(fields: [productid],references: [id])
-  cart Cart @relation(fields: [cartid],references: [id])
-  cartid Int 
+  product Product @relation(fields: [productid], references: [id])
+  cart Cart @relation(fields: [cartid], references: [id])
+  cartid Int
   productid Int
   quantity Int
 }
@@ -76,39 +91,39 @@ model CartItem {
 model ProductPhoto {
   id Int @id @default(autoincrement())
   url String
-  product Product @relation(fields: [productid] , references: [id])
+  product Product @relation(fields: [productid], references: [id])
   productid Int
 }
 
 model Order {
-  id        Int @id @default(autoincrement())
-  user      User @relation(fields: [userid], references: [id])
-  userid    Int
-  status    String @default("PENDING")
-  total     Int
-  address   String?
+  id Int @id @default(autoincrement())
+  user User @relation(fields: [userid], references: [id])
+  userid Int
+  status String @default("PENDING")
+  total Int
+  address String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  items     OrderItem[]
+  items OrderItem[]
 }
 
 model OrderItem {
-  id        Int @id @default(autoincrement())
-  order     Order @relation(fields: [orderid], references: [id])
-  orderid   Int
-  product   Product @relation(fields: [productid], references: [id])
+  id Int @id @default(autoincrement())
+  order Order @relation(fields: [orderid], references: [id])
+  orderid Int
+  product Product @relation(fields: [productid], references: [id])
   productid Int
-  quantity  Int
+  quantity Int
   unitPrice Int
 }
 
 model Review {
-  id        Int @id @default(autoincrement())
-  user User @relation(fields: [userid],references: [id])
-  userid Int 
-  product Product @relation(fields: [productid],references: [id])
+  id Int @id @default(autoincrement())
+  user User @relation(fields: [userid], references: [id])
+  userid Int
+  product Product @relation(fields: [productid], references: [id])
   productid Int
   text String
-   createdAt DateTime @default(now())
+  createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

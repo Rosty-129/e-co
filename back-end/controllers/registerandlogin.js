@@ -6,6 +6,9 @@ import jwt from "jsonwebtoken";
 
 const prisma = new PrismaClient();
 
+const INACTIVITY_TIMEOUT = 15 * 60 * 1000;
+const ABSOLUTE_TIMEOUT = 8 * 60 * 60 * 1000;
+
 const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
@@ -66,13 +69,43 @@ const publicUser = (user) => {
     return safeUser;
 };
 
-// Generate JWT
-const generateToken = (user) => {
-    return jwt.sign(
-        { id: user.id, email: user.email, role: user.role },
-        process.env.JWT_SECRET,
-        { expiresIn: "1h" }
+// Create database session and JWT
+const createSessionAndToken = async (user, database = prisma) => {
+    const now = Date.now();
+
+    const absoluteExpiresAt = new Date(
+        now + ABSOLUTE_TIMEOUT
     );
+
+    const expiresAt = new Date(
+        Math.min(
+            now + INACTIVITY_TIMEOUT,
+            absoluteExpiresAt.getTime()
+        )
+    );
+
+    const session = await database.session.create({
+        data: {
+            userId: user.id,
+            expiresAt,
+            absoluteExpiresAt
+        }
+    });
+
+    const token = jwt.sign(
+        {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            sid: session.id
+        },
+        process.env.JWT_SECRET,
+        {
+            expiresIn: "8h"
+        }
+    );
+
+    return token;
 };
 
 // REGISTER
@@ -87,7 +120,6 @@ export const register = async (req, res) => {
     } = req.body;
 
     try {
-        // Verify CAPTCHA
         const captchaValid = await verifyTurnstile(turnstileToken);
 
         if (!captchaValid) {
@@ -102,7 +134,9 @@ export const register = async (req, res) => {
             Math.floor(100000 + Math.random() * 900000)
         );
 
-        const expiresat = new Date(Date.now() + 15 * 60 * 1000);
+        const expiresat = new Date(
+            Date.now() + 15 * 60 * 1000
+        );
 
         const newuser = await prisma.User.create({
             data: {
@@ -173,7 +207,7 @@ export const verifycode = async (req, res) => {
             }
         });
 
-        const token = generateToken(verifiedUser);
+        const token = await createSessionAndToken(verifiedUser);
 
         return res.status(200).json({
             message: "Registration successful!",
@@ -184,7 +218,7 @@ export const verifycode = async (req, res) => {
     } catch (error) {
         console.error("VERIFY ERROR:", error);
 
-        return res.status(401).json({
+        return res.status(500).json({
             message: "Server problem in verifying"
         });
     }
@@ -195,7 +229,6 @@ export const login = async (req, res) => {
     try {
         const { email, password, turnstileToken } = req.body;
 
-        // Verify CAPTCHA BEFORE checking credentials
         const captchaValid = await verifyTurnstile(turnstileToken);
 
         if (!captchaValid) {
@@ -232,7 +265,7 @@ export const login = async (req, res) => {
             });
         }
 
-        const token = generateToken(check);
+        const token = await createSessionAndToken(check);
 
         return res.status(200).json({
             message: "Successfully logged in",
@@ -243,7 +276,7 @@ export const login = async (req, res) => {
     } catch (error) {
         console.error("LOGIN ERROR:", error);
 
-        return res.status(400).json({
+        return res.status(500).json({
             message: "Could not login"
         });
     }
@@ -254,7 +287,6 @@ export const forgotpassword = async (req, res) => {
     const { email, turnstileToken } = req.body;
 
     try {
-        // Verify CAPTCHA BEFORE sending reset email
         const captchaValid = await verifyTurnstile(turnstileToken);
 
         if (!captchaValid) {
@@ -277,7 +309,9 @@ export const forgotpassword = async (req, res) => {
             Math.floor(100000 + Math.random() * 900000)
         );
 
-        const expiresat = new Date(Date.now() + 15 * 60 * 1000);
+        const expiresat = new Date(
+            Date.now() + 15 * 60 * 1000
+        );
 
         await prisma.User.update({
             where: { id: user.id },
@@ -301,7 +335,7 @@ export const forgotpassword = async (req, res) => {
     } catch (error) {
         console.error("FORGOT PASSWORD ERROR:", error);
 
-        return res.status(400).json({
+        return res.status(500).json({
             message: "Error sending reset code"
         });
     }
@@ -328,7 +362,10 @@ export const verifyinglogin = async (req, res) => {
             });
         }
 
-        if (!user.ResetCodeExpires || new Date() > user.ResetCodeExpires) {
+        if (
+            !user.ResetCodeExpires ||
+            new Date() > user.ResetCodeExpires
+        ) {
             return res.status(400).json({
                 message: "Code expired"
             });
@@ -345,7 +382,16 @@ export const verifyinglogin = async (req, res) => {
             }
         });
 
-        const token = generateToken(updatedUser);
+        // Invalidate all previous sessions after password reset.
+        const token = await prisma.$transaction(async (tx) => {
+            await tx.session.deleteMany({
+                where: {
+                    userId: updatedUser.id
+                }
+            });
+
+            return createSessionAndToken(updatedUser, tx);
+        });
 
         return res.status(200).json({
             message: "Password successfully changed",
@@ -356,8 +402,31 @@ export const verifyinglogin = async (req, res) => {
     } catch (error) {
         console.error("RESET PASSWORD ERROR:", error);
 
-        return res.status(400).json({
+        return res.status(500).json({
             message: "Error resetting password"
+        });
+    }
+};
+
+// LOGOUT
+export const logout = async (req, res) => {
+    try {
+        await prisma.session.deleteMany({
+            where: {
+                id: req.user.sid,
+                userId: req.user.id
+            }
+        });
+
+        return res.status(200).json({
+            message: "Successfully logged out"
+        });
+
+    } catch (error) {
+        console.error("LOGOUT ERROR:", error);
+
+        return res.status(500).json({
+            message: "Could not log out"
         });
     }
 };
