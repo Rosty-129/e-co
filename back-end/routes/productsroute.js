@@ -1,4 +1,3 @@
-
 import express from "express";
 
 import {
@@ -24,6 +23,10 @@ import {
     adminWriteLimiter
 } from "../middleware/rateLimit.js";
 
+import {
+    uploadProductImages
+} from "../middleware/uploadProductImages.js";
+
 const router = express.Router();
 
 // Public
@@ -46,6 +49,7 @@ router.post(
     adminWriteLimiter,
     verify,
     isadmin,
+    uploadProductImages,
     validate(createProductSchema),
     createproduct
 );

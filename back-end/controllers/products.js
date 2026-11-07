@@ -1,5 +1,8 @@
-
 import { PrismaClient } from "@prisma/client";
+import {
+    uploadProductImage,
+    deleteCloudinaryImage
+} from "../services/productImages.js";
 
 const prisma = new PrismaClient();
 
@@ -13,54 +16,112 @@ const getPagination = (query) => {
     };
 };
 
-export const createproduct = async (req, res) => {
-    try {
-        const { name, description, categoryid, price, Stock } = req.body;
+const uploadFiles = async (files) => {
+    const uploaded = [];
 
-        if (!name || !categoryid) {
-            return res.status(400).json({
-                message: "name and categoryid are required"
-            });
+    try {
+        for (const file of files || []) {
+            const image = await uploadProductImage(file);
+            uploaded.push(image);
         }
 
-        const pro = await prisma.Product.create({
+        return uploaded;
+    } catch (error) {
+        await Promise.allSettled(
+            uploaded.map(image =>
+                deleteCloudinaryImage(image.publicId)
+            )
+        );
+
+        throw error;
+    }
+};
+
+// CREATE PRODUCT
+export const createproduct = async (req, res) => {
+    let uploadedImages = [];
+
+    try {
+        const {
+            name,
+            description,
+            categoryid,
+            price,
+            Stock
+        } = req.body;
+
+        uploadedImages = await uploadFiles(req.files);
+
+        const product = await prisma.Product.create({
             data: {
                 name,
                 description,
-                categoryid: Number(categoryid),
-                price: Number(price) || 0,
-                Stock: Number(Stock) || 0
+                categoryid,
+                price,
+                Stock,
+
+                productphoto: {
+                    create: uploadedImages.map(image => ({
+                        url: image.url,
+                        publicId: image.publicId
+                    }))
+                }
+            },
+
+            include: {
+                productphoto: {
+                    orderBy: {
+                        id: "asc"
+                    }
+                },
+                category: true
             }
         });
 
         return res.status(201).json({
             message: "product created",
-            product: pro
+            product
         });
 
     } catch (error) {
         console.error("CREATE PRODUCT ERROR:", error);
-        return res.status(500).json({
+
+        await Promise.allSettled(
+            uploadedImages.map(image =>
+                deleteCloudinaryImage(image.publicId)
+            )
+        );
+
+        return res.status(error.status || 500).json({
             message: error.message || "error creating product"
         });
     }
 };
 
+// UPDATE PRODUCT
 export const updateproduct = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, description, categoryid, price, Stock } = req.body;
+        const {
+            name,
+            description,
+            categoryid,
+            price,
+            Stock
+        } = req.body;
 
         const data = {};
 
         if (name !== undefined) data.name = name;
         if (description !== undefined) data.description = description;
-        if (categoryid !== undefined) data.categoryid = Number(categoryid);
-        if (price !== undefined) data.price = Number(price);
-        if (Stock !== undefined) data.Stock = Number(Stock);
+        if (categoryid !== undefined) data.categoryid = categoryid;
+        if (price !== undefined) data.price = price;
+        if (Stock !== undefined) data.Stock = Stock;
 
         const updated = await prisma.Product.update({
-            where: { id: Number(id) },
+            where: {
+                id: Number(id)
+            },
             data
         });
 
@@ -84,12 +145,50 @@ export const updateproduct = async (req, res) => {
     }
 };
 
+// DELETE PRODUCT
 export const deleteproduct = async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = Number(req.params.id);
 
-        await prisma.Product.delete({
-            where: { id: Number(id) }
+        const product = await prisma.Product.findUnique({
+            where: { id },
+            include: {
+                productphoto: true
+            }
+        });
+
+        if (!product) {
+            return res.status(404).json({
+                message: "product not found"
+            });
+        }
+
+        // Delete the database records together.
+        await prisma.$transaction(async (tx) => {
+            await tx.ProductPhoto.deleteMany({
+                where: { productid: id }
+            });
+
+            await tx.Product.delete({
+                where: { id }
+            });
+        });
+
+        // Cloudinary cleanup happens after the database deletion.
+        // A failed cleanup does not leave broken photo records in the DB.
+        const cleanupResults = await Promise.allSettled(
+            product.productphoto
+                .filter(photo => photo.publicId)
+                .map(photo => deleteCloudinaryImage(photo.publicId))
+        );
+
+        cleanupResults.forEach(result => {
+            if (result.status === "rejected") {
+                console.error(
+                    "CLOUDINARY CLEANUP ERROR:",
+                    result.reason
+                );
+            }
         });
 
         return res.status(200).json({
@@ -111,6 +210,7 @@ export const deleteproduct = async (req, res) => {
     }
 };
 
+// GET ALL PRODUCTS
 export const getallproduct = async (req, res) => {
     try {
         const { search, categoryid } = {
@@ -137,12 +237,18 @@ export const getallproduct = async (req, res) => {
             where,
             skip,
             take: limit,
+
             orderBy: [
                 { createdAt: "desc" },
                 { id: "desc" }
             ],
+
             include: {
-                productphoto: true,
+                productphoto: {
+                    orderBy: {
+                        id: "asc"
+                    }
+                },
                 category: true
             }
         });
@@ -151,21 +257,31 @@ export const getallproduct = async (req, res) => {
 
     } catch (error) {
         console.error("GET PRODUCTS ERROR:", error);
+
         return res.status(500).json({
             message: error.message || "error fetching products"
         });
     }
 };
 
+// GET ONE PRODUCT
 export const getoneproduct = async (req, res) => {
     try {
         const { id } = req.params;
 
         const one = await prisma.Product.findUnique({
-            where: { id: Number(id) },
+            where: {
+                id: Number(id)
+            },
+
             include: {
                 category: true,
-                productphoto: true
+
+                productphoto: {
+                    orderBy: {
+                        id: "asc"
+                    }
+                }
             }
         });
 
@@ -179,6 +295,7 @@ export const getoneproduct = async (req, res) => {
 
     } catch (error) {
         console.error("GET PRODUCT ERROR:", error);
+
         return res.status(500).json({
             message: error.message || "error fetching product"
         });

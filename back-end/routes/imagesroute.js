@@ -1,4 +1,3 @@
-
 import express from "express";
 
 import {
@@ -10,9 +9,17 @@ import { verify } from "../middleware/jwt.js";
 import { isadmin } from "../middleware/adminoruser.js";
 import { validate } from "../middleware/validate.js";
 
-import { imageParamsSchema } from "../middleware/validators/imageValidator.js";
+import {
+    imageParamsSchema
+} from "../middleware/validators/imageValidator.js";
 
-import { adminWriteLimiter } from "../middleware/rateLimit.js";
+import {
+    adminWriteLimiter
+} from "../middleware/rateLimit.js";
+
+import {
+    uploadProductImages
+} from "../middleware/uploadProductImages.js";
 
 const router = express.Router();
 
@@ -23,6 +30,7 @@ router.post(
     verify,
     isadmin,
     validate(imageParamsSchema, "params"),
+    uploadProductImages,
     createimage
 );
 
