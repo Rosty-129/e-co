@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Turnstile } from '@marsidev/react-turnstile';
@@ -97,7 +96,6 @@ export default function Register() {
 
     run(async () => {
       try {
-        // Send CAPTCHA token with registration data
         await register({
           ...payload,
           turnstileToken: captchaToken,
@@ -111,11 +109,16 @@ export default function Register() {
     });
   };
 
+  // VERIFY EMAIL
   const handleVerify = (e) => {
     e.preventDefault();
 
     run(async () => {
-      await verifyEmail({ email: form.email, code });
+      await verifyEmail({
+        email: form.email,
+        verificationCode: code,
+      });
+
       navigate('/');
     });
   };
