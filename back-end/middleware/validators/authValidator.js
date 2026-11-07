@@ -1,50 +1,31 @@
-import express from "express";
+import { z } from "zod";
 
-import {
-    createreview,
-    updatereview,
-    deletereview,
-    getallmyreviews,
-    getallreviews
-} from "../controllers/review.js";
+export const registerSchema = z.object({
+    email: z.string().email(),
+    password: z.string().min(8).max(128),
+    firstname: z.string().trim().min(2).max(50),
+    lastname: z.string().trim().min(2).max(50),
+    phone: z.string().trim().min(5).max(20),
+    turnstileToken: z.string().min(1)
+}).strict();
 
-import { verify } from "../middleware/jwt.js";
-import { validate } from "../middleware/validate.js";
+export const loginSchema = z.object({
+    email: z.string().email(),
+    password: z.string().min(1),
+    turnstileToken: z.string().min(1)
+}).strict();
 
-import {
-    createReviewSchema,
-    updateReviewSchema,
-    reviewParamsSchema
-} from "../validators/reviewValidator.js";
+export const verifyEmailSchema = z.object({
+    email: z.string().email(),
+    verificationCode: z.string().min(1)
+}).strict();
 
-const router = express.Router();
+export const forgotPasswordSchema = z.object({
+    email: z.string().email()
+}).strict();
 
-// Public
-router.get("/", getallreviews);
-
-// Logged-in user
-router.post(
-    "/",
-    verify,
-    validate(createReviewSchema),
-    createreview
-);
-
-router.get("/my", verify, getallmyreviews);
-
-router.patch(
-    "/:id",
-    verify,
-    validate(reviewParamsSchema, "params"),
-    validate(updateReviewSchema),
-    updatereview
-);
-
-router.delete(
-    "/:id",
-    verify,
-    validate(reviewParamsSchema, "params"),
-    deletereview
-);
-
-export default router;
+export const resetPasswordSchema = z.object({
+    email: z.string().email(),
+    resetCode: z.string().min(1),
+    newPassword: z.string().min(8).max(128)
+}).strict();
