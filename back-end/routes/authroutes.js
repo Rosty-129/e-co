@@ -8,16 +8,26 @@ import {
     verifyinglogin
 } from "../controllers/registerandlogin.js";
 
+import { validate } from "../middleware/validate.js";
+
+import {
+    registerSchema,
+    verifyEmailSchema,
+    loginSchema,
+    forgotPasswordSchema,
+    resetPasswordSchema
+} from "../middleware/validators/authValidator.js";
+
 const router = express.Router();
 
-router.post("/register", register);
+router.post("/register", validate(registerSchema), register);
 
-router.post("/verify", verifycode);
+router.post("/verify", validate(verifyEmailSchema), verifycode);
 
-router.post("/login", login);
+router.post("/login", validate(loginSchema), login);
 
-router.post("/forgot-password", forgotpassword);
+router.post("/forgot-password", validate(forgotPasswordSchema), forgotpassword);
 
-router.post("/reset-password", verifyinglogin);
+router.post("/reset-password", validate(resetPasswordSchema), verifyinglogin);
 
 export default router;

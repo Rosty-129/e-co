@@ -1,4 +1,5 @@
 import express from "express";
+
 import {
     createorder,
     getallorder,
@@ -9,17 +10,47 @@ import {
 
 import { verify } from "../middleware/jwt.js";
 import { isadmin } from "../middleware/adminoruser.js";
+import { validate } from "../middleware/validate.js";
+
+import {
+    createOrderSchema,
+    orderParamsSchema
+} from "../middleware/validators/orderValidator.js";
 
 const router = express.Router();
 
 // User
-router.post("/", verify, createorder);
+router.post(
+    "/",
+    verify,
+    validate(createOrderSchema),
+    createorder
+);
+
 router.get("/", verify, getallorder);
 
-// Admin — note: /admin/all comes BEFORE /:id/... so Express doesn't try to
-// parse "admin" as an :id param
-router.get("/admin/all", verify, isadmin, getallordersadmin);
-router.patch("/:id/complete", verify, isadmin, changetocomplete);
-router.patch("/:id/disapprove", verify, isadmin, changetodisapprove);
+// Admin
+router.get(
+    "/admin/all",
+    verify,
+    isadmin,
+    getallordersadmin
+);
+
+router.patch(
+    "/:id/complete",
+    verify,
+    isadmin,
+    validate(orderParamsSchema, "params"),
+    changetocomplete
+);
+
+router.patch(
+    "/:id/disapprove",
+    verify,
+    isadmin,
+    validate(orderParamsSchema, "params"),
+    changetodisapprove
+);
 
 export default router;
