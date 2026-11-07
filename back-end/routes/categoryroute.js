@@ -1,3 +1,4 @@
+
 import express from "express";
 
 import {
@@ -18,13 +19,23 @@ import {
     categoryParamsSchema
 } from "../middleware/validators/categoryValidator.js";
 
+import {
+    readLimiter,
+    adminWriteLimiter
+} from "../middleware/rateLimit.js";
+
 const router = express.Router();
 
 // Public
-router.get("/", getallcat);
+router.get(
+    "/",
+    readLimiter,
+    getallcat
+);
 
 router.get(
     "/:id",
+    readLimiter,
     validate(categoryParamsSchema, "params"),
     getone
 );
@@ -32,6 +43,7 @@ router.get(
 // Admin only
 router.post(
     "/",
+    adminWriteLimiter,
     verify,
     isadmin,
     validate(createCategorySchema),
@@ -40,6 +52,7 @@ router.post(
 
 router.patch(
     "/:id",
+    adminWriteLimiter,
     verify,
     isadmin,
     validate(categoryParamsSchema, "params"),
@@ -49,6 +62,7 @@ router.patch(
 
 router.delete(
     "/:id",
+    adminWriteLimiter,
     verify,
     isadmin,
     validate(categoryParamsSchema, "params"),

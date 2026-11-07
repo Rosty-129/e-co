@@ -1,3 +1,4 @@
+
 import express from "express";
 
 import {
@@ -14,10 +15,13 @@ import {
 import { verify } from "../middleware/jwt.js";
 import { isadmin } from "../middleware/adminoruser.js";
 
+import { dashboardLimiter } from "../middleware/rateLimit.js";
+
 const router = express.Router();
 
 router.use(verify);
 router.use(isadmin);
+router.use(dashboardLimiter);
 
 router.get("/revenue", revenue);
 

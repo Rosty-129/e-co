@@ -1,3 +1,4 @@
+
 import express from "express";
 
 import {
@@ -14,9 +15,15 @@ import {
     changePasswordSchema
 } from "../middleware/validators/profileValidator.js";
 
+import { changePasswordLimiter } from "../middleware/rateLimit.js";
+
 const router = express.Router();
 
-router.get("/", verify, getprofile);
+router.get(
+    "/",
+    verify,
+    getprofile
+);
 
 router.patch(
     "/",
@@ -27,6 +34,7 @@ router.patch(
 
 router.patch(
     "/password",
+    changePasswordLimiter,
     verify,
     validate(changePasswordSchema),
     changepassword

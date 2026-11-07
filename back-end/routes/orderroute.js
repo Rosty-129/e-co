@@ -1,3 +1,4 @@
+
 import express from "express";
 
 import {
@@ -17,21 +18,34 @@ import {
     orderParamsSchema
 } from "../middleware/validators/orderValidator.js";
 
+import {
+    ordersLimiter,
+    readLimiter,
+    adminWriteLimiter
+} from "../middleware/rateLimit.js";
+
 const router = express.Router();
 
 // User
 router.post(
     "/",
+    ordersLimiter,
     verify,
     validate(createOrderSchema),
     createorder
 );
 
-router.get("/", verify, getallorder);
+router.get(
+    "/",
+    readLimiter,
+    verify,
+    getallorder
+);
 
 // Admin
 router.get(
     "/admin/all",
+    readLimiter,
     verify,
     isadmin,
     getallordersadmin
@@ -39,6 +53,7 @@ router.get(
 
 router.patch(
     "/:id/complete",
+    adminWriteLimiter,
     verify,
     isadmin,
     validate(orderParamsSchema, "params"),
@@ -47,6 +62,7 @@ router.patch(
 
 router.patch(
     "/:id/disapprove",
+    adminWriteLimiter,
     verify,
     isadmin,
     validate(orderParamsSchema, "params"),

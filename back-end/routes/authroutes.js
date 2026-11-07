@@ -1,3 +1,4 @@
+
 import express from "express";
 
 import {
@@ -18,16 +19,49 @@ import {
     resetPasswordSchema
 } from "../middleware/validators/authValidator.js";
 
+import {
+    registerLimiter,
+    verifyEmailLimiter,
+    loginLimiter,
+    forgotPasswordLimiter,
+    resetPasswordLimiter
+} from "../middleware/rateLimit.js";
+
 const router = express.Router();
 
-router.post("/register", validate(registerSchema), register);
+router.post(
+    "/register",
+    registerLimiter,
+    validate(registerSchema),
+    register
+);
 
-router.post("/verify", validate(verifyEmailSchema), verifycode);
+router.post(
+    "/verify",
+    verifyEmailLimiter,
+    validate(verifyEmailSchema),
+    verifycode
+);
 
-router.post("/login", validate(loginSchema), login);
+router.post(
+    "/login",
+    loginLimiter,
+    validate(loginSchema),
+    login
+);
 
-router.post("/forgot-password", validate(forgotPasswordSchema), forgotpassword);
+router.post(
+    "/forgot-password",
+    forgotPasswordLimiter,
+    validate(forgotPasswordSchema),
+    forgotpassword
+);
 
-router.post("/reset-password", validate(resetPasswordSchema), verifyinglogin);
+router.post(
+    "/reset-password",
+    resetPasswordLimiter,
+    validate(resetPasswordSchema),
+    verifyinglogin
+);
 
 export default router;

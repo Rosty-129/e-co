@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-
+import { generalLimiter } from "./middleware/rateLimit.js";
 import authRoutes from "./routes/authroutes.js";
 import cartRoutes from "./routes/cartroute.js";
 import categoryRoutes from "./routes/categoryroute.js";
@@ -42,6 +42,8 @@ app.get("/", (req, res) => {
     message: "API is running"
   });
 });
+
+app.use(generalLimiter);
 
 // Authentication
 app.use("/auth", authRoutes);

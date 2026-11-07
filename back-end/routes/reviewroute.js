@@ -1,3 +1,4 @@
+
 import express from "express";
 
 import {
@@ -17,23 +18,39 @@ import {
     reviewParamsSchema
 } from "../middleware/validators/reviewValidator.js";
 
+import {
+    readLimiter,
+    reviewsLimiter
+} from "../middleware/rateLimit.js";
+
 const router = express.Router();
 
 // Public
-router.get("/", getallreviews);
+router.get(
+    "/",
+    readLimiter,
+    getallreviews
+);
 
 // Logged-in user
 router.post(
     "/",
+    reviewsLimiter,
     verify,
     validate(createReviewSchema),
     createreview
 );
 
-router.get("/my", verify, getallmyreviews);
+router.get(
+    "/my",
+    readLimiter,
+    verify,
+    getallmyreviews
+);
 
 router.patch(
     "/:id",
+    reviewsLimiter,
     verify,
     validate(reviewParamsSchema, "params"),
     validate(updateReviewSchema),
@@ -42,6 +59,7 @@ router.patch(
 
 router.delete(
     "/:id",
+    reviewsLimiter,
     verify,
     validate(reviewParamsSchema, "params"),
     deletereview

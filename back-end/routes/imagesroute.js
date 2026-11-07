@@ -1,3 +1,4 @@
+
 import express from "express";
 
 import {
@@ -11,11 +12,14 @@ import { validate } from "../middleware/validate.js";
 
 import { imageParamsSchema } from "../middleware/validators/imageValidator.js";
 
+import { adminWriteLimiter } from "../middleware/rateLimit.js";
+
 const router = express.Router();
 
 // Admin only
 router.post(
     "/product/:id",
+    adminWriteLimiter,
     verify,
     isadmin,
     validate(imageParamsSchema, "params"),
@@ -24,6 +28,7 @@ router.post(
 
 router.delete(
     "/:id",
+    adminWriteLimiter,
     verify,
     isadmin,
     validate(imageParamsSchema, "params"),

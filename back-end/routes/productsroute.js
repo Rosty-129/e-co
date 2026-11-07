@@ -1,3 +1,4 @@
+
 import express from "express";
 
 import {
@@ -18,18 +19,31 @@ import {
     productParamsSchema
 } from "../middleware/validators/productValidator.js";
 
+import {
+    readLimiter,
+    adminWriteLimiter
+} from "../middleware/rateLimit.js";
+
 const router = express.Router();
 
-router.get("/", getallproduct);
+// Public
+router.get(
+    "/",
+    readLimiter,
+    getallproduct
+);
 
 router.get(
     "/:id",
+    readLimiter,
     validate(productParamsSchema, "params"),
     getoneproduct
 );
 
+// Admin only
 router.post(
     "/",
+    adminWriteLimiter,
     verify,
     isadmin,
     validate(createProductSchema),
@@ -38,6 +52,7 @@ router.post(
 
 router.patch(
     "/:id",
+    adminWriteLimiter,
     verify,
     isadmin,
     validate(productParamsSchema, "params"),
@@ -47,6 +62,7 @@ router.patch(
 
 router.delete(
     "/:id",
+    adminWriteLimiter,
     verify,
     isadmin,
     validate(productParamsSchema, "params"),

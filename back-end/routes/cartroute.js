@@ -1,3 +1,4 @@
+
 import express from "express";
 
 import {
@@ -17,20 +18,29 @@ import {
     cartItemParamsSchema
 } from "../middleware/validators/cartValidator.js";
 
+import { cartLimiter } from "../middleware/rateLimit.js";
+
 const router = express.Router();
 
 router.post(
     "/:id",
+    cartLimiter,
     verify,
     validate(cartItemParamsSchema, "params"),
     validate(addToCartSchema),
     addtocart
 );
 
-router.get("/", verify, getusercart);
+router.get(
+    "/",
+    cartLimiter,
+    verify,
+    getusercart
+);
 
 router.patch(
     "/:id",
+    cartLimiter,
     verify,
     validate(cartItemParamsSchema, "params"),
     validate(updateCartSchema),
@@ -39,11 +49,17 @@ router.patch(
 
 router.delete(
     "/:id",
+    cartLimiter,
     verify,
     validate(cartItemParamsSchema, "params"),
     deleteitem
 );
 
-router.delete("/", verify, clearcart);
+router.delete(
+    "/",
+    cartLimiter,
+    verify,
+    clearcart
+);
 
 export default router;
