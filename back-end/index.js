@@ -14,6 +14,9 @@ import reviewRoutes from "./routes/reviewroute.js";
 
 const app = express();
 
+// Trust Vercel's proxy so Express can identify the real client IP
+app.set("trust proxy", 1);
+
 // Remove Express framework identification
 app.disable("x-powered-by");
 
