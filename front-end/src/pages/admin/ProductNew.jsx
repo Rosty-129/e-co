@@ -15,29 +15,89 @@ export default function ProductNew() {
     price: '',
     Stock: '',
   });
+
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [previews, setPreviews] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Belt-and-suspenders: pull fresh categories on mount in case
-  // another admin added one in a different tab / session.
   useEffect(() => {
     fetchCategories().catch(console.error);
   }, [fetchCategories]);
 
-  // Auto-select first category once loaded
   useEffect(() => {
     if (categories.length > 0 && !formData.categoryid) {
-      setFormData((f) => ({ ...f, categoryid: categories[0].id }));
+      setFormData((f) => ({
+        ...f,
+        categoryid: String(categories[0].id),
+      }));
     }
   }, [categories, formData.categoryid]);
 
+  // Generate previews for selected images.
+  useEffect(() => {
+    const urls = selectedImages.map((file) =>
+      URL.createObjectURL(file)
+    );
+
+    setPreviews(urls);
+
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [selectedImages]);
+
   const handleCategoryChange = (e) => {
     const val = e.target.value;
+
     if (val === '__new__') {
       navigate('/admin/categories/new');
       return;
     }
-    setFormData({ ...formData, categoryid: val });
+
+    setFormData({
+      ...formData,
+      categoryid: val,
+    });
+  };
+
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files || []);
+
+    if (files.length > 5) {
+      setError('You can upload a maximum of 5 images.');
+      e.target.value = '';
+      return;
+    }
+
+    const allowedTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+    ];
+
+    for (const file of files) {
+      if (!allowedTypes.includes(file.type)) {
+        setError('Only JPEG, PNG, and WebP images are allowed.');
+        e.target.value = '';
+        return;
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Each image must be smaller than 5 MB.');
+        e.target.value = '';
+        return;
+      }
+    }
+
+    setError('');
+    setSelectedImages(files);
+  };
+
+  const removeImage = (index) => {
+    setSelectedImages((prev) =>
+      prev.filter((_, i) => i !== index)
+    );
   };
 
   const handleSubmit = async (e) => {
@@ -45,46 +105,55 @@ export default function ProductNew() {
     setError('');
 
     if (
-      !formData.name ||
+      !formData.name.trim() ||
       !formData.categoryid ||
-      Number(formData.price) <= 0 ||
-      Number(formData.Stock) < 0
+      Number(formData.price) < 0 ||
+      !Number.isInteger(Number(formData.price)) ||
+      Number(formData.Stock) < 0 ||
+      !Number.isInteger(Number(formData.Stock))
     ) {
-      setError('Please provide valid name, category, positive price, and stock count.');
+      setError(
+        'Please provide a valid name, category, whole-number price, and stock count.'
+      );
       return;
     }
 
     setLoading(true);
+
     try {
       const token = localStorage.getItem('authtoken');
 
-      // NOTE: if your Prisma Category.id is a String (cuid/uuid), remove
-      // Number() around categoryid. Keep Number() only for Int ids.
-      const payload = {
-        name: formData.name,
-        description: formData.description,
-        categoryid: formData.categoryid,
-        price: Number(formData.price),
-        Stock: Number(formData.Stock),
-      };
+      const payload = new FormData();
+
+      payload.append('name', formData.name);
+      payload.append('description', formData.description);
+      payload.append('categoryid', formData.categoryid);
+      payload.append('price', formData.price);
+      payload.append('Stock', formData.Stock);
+
+      selectedImages.forEach((image) => {
+        payload.append('images', image);
+      });
 
       const res = await fetch(`${API}/product`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload),
+        body: payload,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to create product');
 
-      // Refresh products so inventory / shop see the new one immediately
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to create product');
+      }
+
       await fetchProducts();
 
       navigate('/admin/inventory');
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Something went wrong.');
     } finally {
       setLoading(false);
     }
@@ -92,25 +161,43 @@ export default function ProductNew() {
 
   return (
     <div className="max-w-xl mx-auto border-2 border-black rounded-lg p-6 bg-white">
-      <h1 className="text-xl font-medium mb-6 text-black">Create New Product</h1>
+      <h1 className="text-xl font-medium mb-6 text-black">
+        Create New Product
+      </h1>
 
-      {error && <p className="p-3 bg-red-50 text-red-700 text-xs rounded mb-4">{error}</p>}
+      {error && (
+        <p className="p-3 bg-red-50 text-red-700 text-xs rounded mb-4">
+          {error}
+        </p>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-semibold text-black mb-1">Product Name</label>
+          <label className="block text-xs font-semibold text-black mb-1">
+            Product Name
+          </label>
+
           <input
             type="text"
             required
             value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                name: e.target.value,
+              })
+            }
             className="w-full p-2 border-2 border-black rounded bg-white text-sm text-gray-800 focus:outline-none"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-black mb-1">Category</label>
+          <label className="block text-xs font-semibold text-black mb-1">
+            Category
+          </label>
+
           <select
+            required
             value={formData.categoryid}
             onChange={handleCategoryChange}
             className="w-full p-2 border-2 border-black rounded bg-white text-sm text-gray-800 focus:outline-none"
@@ -120,15 +207,18 @@ export default function ProductNew() {
                 No categories yet — create one below
               </option>
             )}
+
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
+
             <option value="__new__" className="font-semibold">
-              ➕ Create new category…
+              Create new category…
             </option>
           </select>
+
           <p className="mt-1 text-xs text-gray-500">
             Need a category that doesn't exist yet? Pick "Create new category…" above.
           </p>
@@ -136,36 +226,106 @@ export default function ProductNew() {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-black mb-1">Price ($)</label>
+            <label className="block text-xs font-semibold text-black mb-1">
+              Price ($)
+            </label>
+
             <input
               type="number"
-              step="0.01"
+              step="1"
+              min="0"
               required
               value={formData.price}
-              onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  price: e.target.value,
+                })
+              }
               className="w-full p-2 border-2 border-black rounded bg-white text-sm text-gray-800 focus:outline-none"
             />
           </div>
+
           <div>
-            <label className="block text-xs font-semibold text-black mb-1">Stock</label>
+            <label className="block text-xs font-semibold text-black mb-1">
+              Stock
+            </label>
+
             <input
               type="number"
+              min="0"
+              step="1"
               required
               value={formData.Stock}
-              onChange={(e) => setFormData({ ...formData, Stock: e.target.value })}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  Stock: e.target.value,
+                })
+              }
               className="w-full p-2 border-2 border-black rounded bg-white text-sm text-gray-800 focus:outline-none"
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-black mb-1">Description</label>
+          <label className="block text-xs font-semibold text-black mb-1">
+            Description
+          </label>
+
           <textarea
             rows="3"
             value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                description: e.target.value,
+              })
+            }
             className="w-full p-2 border-2 border-black rounded bg-white text-sm text-gray-800 focus:outline-none resize-none"
           />
+        </div>
+
+        {/* Product images */}
+        <div>
+          <label className="block text-xs font-semibold text-black mb-1">
+            Product Images (maximum 5)
+          </label>
+
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            onChange={handleImageChange}
+            className="w-full p-2 border-2 border-black rounded bg-white text-sm text-gray-800"
+          />
+
+          <p className="mt-1 text-xs text-gray-500">
+            JPEG, PNG, or WebP. Maximum 5 MB per image.
+          </p>
+
+          {previews.length > 0 && (
+            <div className="grid grid-cols-3 gap-3 mt-4">
+              {previews.map((preview, index) => (
+                <div key={preview} className="relative">
+                  <img
+                    src={preview}
+                    alt={`Product preview ${index + 1}`}
+                    className="w-full aspect-square object-cover rounded border"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => removeImage(index)}
+                    className="absolute top-1 right-1 bg-black text-white rounded-full w-6 h-6 text-sm"
+                    aria-label={`Remove image ${index + 1}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <button

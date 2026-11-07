@@ -13,14 +13,19 @@ export default function Products() {
 
   const filtered = products.filter((p) => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
-    const matchesCat = selectedCat === 'All' || p.categoryid === Number(selectedCat);
+    const matchesCat =
+      selectedCat === 'All' || p.categoryid === Number(selectedCat);
+
     return matchesSearch && matchesCat;
   });
 
   const handleAdd = (product) => {
     addToCart(product);
     setAdded(product.id);
-    setTimeout(() => setAdded((cur) => (cur === product.id ? null : cur)), 1400);
+    setTimeout(
+      () => setAdded((cur) => (cur === product.id ? null : cur)),
+      1400
+    );
   };
 
   const chip = (active) =>
@@ -37,16 +42,21 @@ export default function Products() {
           <h1 className="text-4xl md:text-5xl font-semibold tracking-tight text-neutral-900">
             Products
           </h1>
+
           <p className="mt-2 text-neutral-500">
             {filtered.length} {filtered.length === 1 ? 'item' : 'items'}
-            {selectedCat !== 'All' || search ? ' match your filters' : ' available'}
+            {selectedCat !== 'All' || search
+              ? ' match your filters'
+              : ' available'}
           </p>
         </div>
+
         <div className="relative w-full md:w-80">
           <Search
             className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400"
             size={18}
           />
+
           <input
             type="text"
             placeholder="Search by name"
@@ -58,9 +68,13 @@ export default function Products() {
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-2 mb-8 -mx-4 px-4 sm:mx-0 sm:px-0">
-        <button onClick={() => setSelectedCat('All')} className={chip(selectedCat === 'All')}>
+        <button
+          onClick={() => setSelectedCat('All')}
+          className={chip(selectedCat === 'All')}
+        >
           All
         </button>
+
         {categories.map((c) => (
           <button
             key={c.id}
@@ -74,8 +88,14 @@ export default function Products() {
 
       {filtered.length === 0 ? (
         <div className="rounded-3xl bg-neutral-200/70 py-20 text-center">
-          <p className="text-xl font-medium text-neutral-900">No products found</p>
-          <p className="mt-2 text-neutral-500">Try a different search or category.</p>
+          <p className="text-xl font-medium text-neutral-900">
+            No products found
+          </p>
+
+          <p className="mt-2 text-neutral-500">
+            Try a different search or category.
+          </p>
+
           <button
             onClick={() => {
               setSearch('');
@@ -92,19 +112,33 @@ export default function Products() {
             const soldOut = product.Stock === 0;
             const low = product.Stock > 0 && product.Stock <= 5;
             const justAdded = added === product.id;
+
+            const firstImage = product.productphoto?.[0]?.url;
+
             return (
-              <article key={product.id} className="group flex flex-col">
+              <article
+                key={product.id}
+                className="group flex flex-col"
+              >
                 <Link
                   to={`/products/${product.id}`}
                   className="relative block aspect-[4/5] overflow-hidden rounded-3xl bg-neutral-200"
                 >
-                  <img
-                    src={product.productphoto}
-                    alt={product.name}
-                    className={`h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 ${
-                      soldOut ? 'grayscale opacity-60' : ''
-                    }`}
-                  />
+                  {firstImage ? (
+                    <img
+                      src={firstImage}
+                      alt={product.name}
+                      loading="lazy"
+                      className={`h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 ${
+                        soldOut ? 'grayscale opacity-60' : ''
+                      }`}
+                    />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center text-neutral-500">
+                      No image
+                    </div>
+                  )}
+
                   {(low || soldOut) && (
                     <span
                       className={`absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-medium backdrop-blur ${
@@ -126,9 +160,16 @@ export default function Products() {
                     >
                       {product.name}
                     </Link>
-                    <p className="text-sm text-neutral-500 truncate">{product.description}</p>
-                    <p className="mt-2 font-semibold text-neutral-900">${product.price}</p>
+
+                    <p className="text-sm text-neutral-500 truncate">
+                      {product.description}
+                    </p>
+
+                    <p className="mt-2 font-semibold text-neutral-900">
+                      ${product.price}
+                    </p>
                   </div>
+
                   <button
                     disabled={soldOut}
                     onClick={() => handleAdd(product)}
@@ -139,7 +180,11 @@ export default function Products() {
                         : 'bg-neutral-200/70 text-neutral-800 hover:bg-neutral-800 hover:text-white'
                     }`}
                   >
-                    {justAdded ? <Check size={18} /> : <Plus size={18} />}
+                    {justAdded ? (
+                      <Check size={18} />
+                    ) : (
+                      <Plus size={18} />
+                    )}
                   </button>
                 </div>
               </article>
