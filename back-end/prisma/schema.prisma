@@ -51,7 +51,10 @@ model Category {
   description String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
   products Product[]
+
+  @@index([createdAt, id])
 }
 
 model Product {
@@ -68,6 +71,9 @@ model Product {
   productphoto ProductPhoto[]
   orderitem OrderItem[]
   review Review[]
+
+  @@index([categoryid, createdAt, id])
+  @@index([createdAt, id])
 }
 
 model Cart {
@@ -86,6 +92,9 @@ model CartItem {
   cartid Int
   productid Int
   quantity Int
+
+  @@index([cartid, productid])
+  @@index([productid])
 }
 
 model ProductPhoto {
@@ -93,6 +102,8 @@ model ProductPhoto {
   url String
   product Product @relation(fields: [productid], references: [id])
   productid Int
+
+  @@index([productid])
 }
 
 model Order {
@@ -105,6 +116,10 @@ model Order {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   items OrderItem[]
+
+  @@index([userid, createdAt, id])
+  @@index([status, createdAt, id])
+  @@index([createdAt, id])
 }
 
 model OrderItem {
@@ -115,6 +130,9 @@ model OrderItem {
   productid Int
   quantity Int
   unitPrice Int
+
+  @@index([orderid])
+  @@index([productid])
 }
 
 model Review {
@@ -126,4 +144,8 @@ model Review {
   text String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([userid, createdAt, id])
+  @@index([productid, createdAt, id])
+  @@index([createdAt, id])
 }

@@ -1,3 +1,4 @@
+
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -8,14 +9,15 @@ export const addtocart = async (req, res) => {
         const { quantity } = req.body;
         const userid = req.user.id;
 
-        if (!quantity || quantity <= 0) {
+        if (!Number.isInteger(quantity) || quantity <= 0) {
             return res.status(400).json({
                 message: "quantity must be greater than 0"
             });
         }
 
         const cart = await prisma.Cart.findUnique({
-            where: { userid }
+            where: { userid },
+            select: { id: true }
         });
 
         if (!cart) {
@@ -25,7 +27,11 @@ export const addtocart = async (req, res) => {
         }
 
         const product = await prisma.Product.findUnique({
-            where: { id: Number(id) }
+            where: { id: Number(id) },
+            select: {
+                id: true,
+                Stock: true
+            }
         });
 
         if (!product) {
@@ -44,6 +50,10 @@ export const addtocart = async (req, res) => {
             where: {
                 cartid: cart.id,
                 productid: product.id
+            },
+            select: {
+                id: true,
+                quantity: true
             }
         });
 
@@ -135,14 +145,15 @@ export const updatequantity = async (req, res) => {
         const { id } = req.params;
         const { quantity } = req.body;
 
-        if (!quantity || quantity <= 0) {
+        if (!Number.isInteger(quantity) || quantity <= 0) {
             return res.status(400).json({
                 message: "quantity must be greater than 0"
             });
         }
 
         const cart = await prisma.Cart.findUnique({
-            where: { userid }
+            where: { userid },
+            select: { id: true }
         });
 
         if (!cart) {
@@ -156,8 +167,13 @@ export const updatequantity = async (req, res) => {
                 id: Number(id),
                 cartid: cart.id
             },
-            include: {
-                product: true
+            select: {
+                id: true,
+                product: {
+                    select: {
+                        Stock: true
+                    }
+                }
             }
         });
 
@@ -202,7 +218,8 @@ export const deleteitem = async (req, res) => {
         const { id } = req.params;
 
         const cart = await prisma.Cart.findUnique({
-            where: { userid }
+            where: { userid },
+            select: { id: true }
         });
 
         if (!cart) {
@@ -215,7 +232,8 @@ export const deleteitem = async (req, res) => {
             where: {
                 id: Number(id),
                 cartid: cart.id
-            }
+            },
+            select: { id: true }
         });
 
         if (!cartitem) {
@@ -249,7 +267,8 @@ export const clearcart = async (req, res) => {
         const userid = req.user.id;
 
         const cart = await prisma.Cart.findUnique({
-            where: { userid }
+            where: { userid },
+            select: { id: true }
         });
 
         if (!cart) {
