@@ -15,6 +15,12 @@ const createLimiter = (limit, message) => {
     });
 };
 
+// Profile password changes: 5 requests / 15 minutes
+export const changePasswordLimiter = createLimiter(
+    5,
+    "Too many password change attempts. Please try again later."
+);
+
 // GENERAL API
 export const generalLimiter = createLimiter(
     100,
