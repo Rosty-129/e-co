@@ -1,4 +1,3 @@
-
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
@@ -173,7 +172,8 @@ export const register = async (req, res) => {
 
 // VERIFY EMAIL CODE
 export const verifycode = async (req, res) => {
-    const { email, code } = req.body;
+    // Must match verifyEmailSchema and the frontend payload
+    const { email, verificationCode } = req.body;
 
     try {
         const user = await prisma.User.findUnique({
@@ -186,7 +186,7 @@ export const verifycode = async (req, res) => {
             });
         }
 
-        if (code !== user.verificationCode) {
+        if (verificationCode !== user.verificationCode) {
             return res.status(400).json({
                 message: "Invalid code"
             });
@@ -343,7 +343,8 @@ export const forgotpassword = async (req, res) => {
 
 // VERIFY RESET CODE AND CHANGE PASSWORD
 export const verifyinglogin = async (req, res) => {
-    const { email, code, password } = req.body;
+    // Must match resetPasswordSchema
+    const { email, resetCode, newPassword } = req.body;
 
     try {
         const user = await prisma.User.findUnique({
@@ -356,7 +357,7 @@ export const verifyinglogin = async (req, res) => {
             });
         }
 
-        if (user.ResetCode !== code) {
+        if (user.ResetCode !== resetCode) {
             return res.status(400).json({
                 message: "Invalid code"
             });
@@ -371,7 +372,7 @@ export const verifyinglogin = async (req, res) => {
             });
         }
 
-        const newhashedpassword = await bcrypt.hash(password, 10);
+        const newhashedpassword = await bcrypt.hash(newPassword, 10);
 
         const updatedUser = await prisma.User.update({
             where: { id: user.id },
