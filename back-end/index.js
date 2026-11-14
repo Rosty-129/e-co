@@ -11,6 +11,7 @@ import orderRoutes from "./routes/orderroute.js";
 import productRoutes from "./routes/productsroute.js";
 import profileRoutes from "./routes/profileroute.js";
 import reviewRoutes from "./routes/reviewroute.js";
+import exportRoute from "./routes/exportRoute.js";
 
 const app = express();
 
@@ -74,6 +75,8 @@ app.use("/images", imagesRoutes);
 
 // Admin dashboard
 app.use("/dashboard", dashboardRoutes);
+
+app.use("/export", exportRoute);
 
 // Export for Vercel serverless
 export default app;
