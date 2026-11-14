@@ -1,9 +1,13 @@
+
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import jwt from "jsonwebtoken";
+import { OAuth2Client } from "google-auth-library";
 
 const prisma = new PrismaClient();
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const INACTIVITY_TIMEOUT = 15 * 60 * 1000;
 const ABSOLUTE_TIMEOUT = 8 * 60 * 60 * 1000;
@@ -254,6 +258,12 @@ export const login = async (req, res) => {
             });
         }
 
+        if (!check.password) {
+            return res.status(401).json({
+                message: "This account uses Google login. Please continue with Google."
+            });
+        }
+
         const hashed = await bcrypt.compare(
             password,
             check.password
@@ -278,6 +288,116 @@ export const login = async (req, res) => {
 
         return res.status(500).json({
             message: "Could not login"
+        });
+    }
+};
+
+// GOOGLE LOGIN
+export const googleLogin = async (req, res) => {
+    try {
+        const { credential } = req.body;
+
+        // 1. Check that Google sent a credential
+        if (!credential || typeof credential !== "string") {
+            return res.status(400).json({
+                message: "Google credential is required"
+            });
+        }
+
+        // 2. Verify the Google ID token
+        let ticket;
+
+        try {
+            ticket = await googleClient.verifyIdToken({
+                idToken: credential,
+                audience: process.env.GOOGLE_CLIENT_ID
+            });
+        } catch (error) {
+            return res.status(401).json({
+                message: "Invalid Google credential"
+            });
+        }
+
+        const payload = ticket.getPayload();
+
+        if (
+            !payload ||
+            !payload.sub ||
+            !payload.email ||
+            payload.email_verified !== true
+        ) {
+            return res.status(401).json({
+                message: "Google account is invalid or email is not verified"
+            });
+        }
+
+        const googleId = payload.sub;
+        const email = payload.email;
+
+        const firstname = payload.given_name || "";
+        const lastname = payload.family_name || "";
+
+        // 3. Find an existing account using Google's unique ID
+        let user = await prisma.User.findUnique({
+            where: { googleId }
+        });
+
+        // 4. If no Google account exists, check the email
+        if (!user) {
+            user = await prisma.User.findUnique({
+                where: { email }
+            });
+
+            if (user) {
+                // Prevent linking a different Google account
+                if (user.googleId && user.googleId !== googleId) {
+                    return res.status(409).json({
+                        message: "This email is linked to another Google account"
+                    });
+                }
+
+                // Link Google to the existing E-co account
+                user = await prisma.User.update({
+                    where: { id: user.id },
+                    data: {
+                        googleId,
+                        isVerified: true,
+                        verificationCode: null,
+                        CodeExpiresAt: null
+                    }
+                });
+
+            } else {
+                // 5. Create a new E-co account
+                user = await prisma.User.create({
+                    data: {
+                        firstname,
+                        lastname,
+                        email,
+                        password: null,
+                        googleId,
+                        role: "USER",
+                        isVerified: true
+                    }
+                });
+            }
+        }
+
+        // 6. Create a database session and JWT
+        const token = await createSessionAndToken(user);
+
+        // 7. Return the same response structure as normal login
+        return res.status(200).json({
+            message: "Google login successful",
+            token,
+            user: publicUser(user)
+        });
+
+    } catch (error) {
+        console.error("GOOGLE LOGIN ERROR:", error);
+
+        return res.status(500).json({
+            message: "Google authentication failed"
         });
     }
 };

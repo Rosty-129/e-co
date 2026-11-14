@@ -7,7 +7,7 @@ import {
     login,
     forgotpassword,
     verifyinglogin,
-    logout
+    logout,googleLogin
 } from "../controllers/registerandlogin.js";
 
 import { verify } from "../middleware/jwt.js";
@@ -62,6 +62,8 @@ router.post(
     validate(forgotPasswordSchema),
     forgotpassword
 );
+
+router.post("/google", googleLogin);
 
 // RESET PASSWORD
 router.post(

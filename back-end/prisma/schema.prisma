@@ -12,10 +12,11 @@ datasource db {
 model User {
   id Int @id @default(autoincrement())
   email String @unique
-  password String
+  password String?
   firstname String
+  googleId String? @unique
   lastname String
-  phone String
+  phone String?
   role String
   verificationCode String?
   CodeExpiresAt DateTime?

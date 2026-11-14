@@ -1,4 +1,3 @@
-
 import {
     createContext,
     useContext,
@@ -51,13 +50,19 @@ export function AuthProvider({ children }) {
             if (response.status === 401) {
                 clearAuth();
             }
-
         } catch (error) {
             console.error('SESSION CHECK ERROR:', error);
         }
     };
 
-    // LOGIN
+    // SAVE AUTHENTICATION RESPONSE
+    const saveAuth = (data) => {
+        localStorage.setItem('user', JSON.stringify(data.user));
+        localStorage.setItem('authtoken', data.token);
+        setUser(data.user);
+    };
+
+    // LOGIN WITH EMAIL AND PASSWORD
     const login = async (email, password, turnstileToken) => {
         const response = await fetch(`${API_URL}/login`, {
             method: 'POST',
@@ -83,11 +88,31 @@ export function AuthProvider({ children }) {
             throw error;
         }
 
-        localStorage.setItem('user', JSON.stringify(data.user));
-        localStorage.setItem('authtoken', data.token);
+        saveAuth(data);
+        return data;
+    };
 
-        setUser(data.user);
+    // LOGIN WITH GOOGLE
+    const googleLogin = async (credential) => {
+        const response = await fetch(`${API_URL}/google`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ credential })
+        });
 
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.message || 'Google login failed');
+        }
+
+        if (!data.token || !data.user) {
+            throw new Error('The server returned an invalid authentication response');
+        }
+
+        saveAuth(data);
         return data;
     };
 
@@ -127,10 +152,7 @@ export function AuthProvider({ children }) {
         }
 
         if (data.user && data.token) {
-            localStorage.setItem('user', JSON.stringify(data.user));
-            localStorage.setItem('authtoken', data.token);
-
-            setUser(data.user);
+            saveAuth(data);
         }
 
         return data;
@@ -194,10 +216,7 @@ export function AuthProvider({ children }) {
         }
 
         if (data.user && data.token) {
-            localStorage.setItem('user', JSON.stringify(data.user));
-            localStorage.setItem('authtoken', data.token);
-
-            setUser(data.user);
+            saveAuth(data);
         }
 
         return data;
@@ -297,7 +316,6 @@ export function AuthProvider({ children }) {
                     clearTimeout(inactivityTimer);
                     clearAuth();
                 }
-
             } catch (error) {
                 console.error('ACTIVITY REQUEST ERROR:', error);
             } finally {
@@ -390,6 +408,7 @@ export function AuthProvider({ children }) {
             value={{
                 user,
                 login,
+                googleLogin,
                 register,
                 verifyEmail,
                 resendCode,

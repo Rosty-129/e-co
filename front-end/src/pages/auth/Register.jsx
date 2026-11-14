@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Turnstile } from '@marsidev/react-turnstile';
+import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../../context/AuthContext';
 import { AuthShell, Field, PrimaryButton, FormError, stepAnim } from '../../components/AuthUI';
 
@@ -11,7 +12,7 @@ const copy = {
 
 export default function Register() {
   const navigate = useNavigate();
-  const { register, verifyEmail, resendCode } = useAuth();
+  const { register, verifyEmail, resendCode, googleLogin } = useAuth();
   const location = useLocation();
 
   const pendingEmail = location.state?.verifyEmail;
@@ -109,6 +110,23 @@ export default function Register() {
     });
   };
 
+  // LOGIN / REGISTER WITH GOOGLE
+  const handleGoogleSuccess = (credentialResponse) => {
+    if (!credentialResponse?.credential) {
+      setError('Google did not return an authentication credential. Please try again.');
+      return;
+    }
+
+    run(async () => {
+      await googleLogin(credentialResponse.credential);
+      navigate('/');
+    });
+  };
+
+  const handleGoogleError = () => {
+    setError('Google sign-in was unsuccessful. Please try again.');
+  };
+
   // VERIFY EMAIL
   const handleVerify = (e) => {
     e.preventDefault();
@@ -140,6 +158,24 @@ export default function Register() {
             </h2>
 
             <FormError>{error}</FormError>
+
+            <div className={`flex justify-center ${loading ? 'pointer-events-none opacity-60' : ''}`}>
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={handleGoogleError}
+                theme="outline"
+                size="large"
+                text="continue_with"
+                shape="rectangular"
+                width="350"
+              />
+            </div>
+
+            <div className="flex items-center gap-3" aria-hidden="true">
+              <div className="h-px flex-1 bg-neutral-200" />
+              <span className="text-xs uppercase tracking-wider text-neutral-400">or sign up with email</span>
+              <div className="h-px flex-1 bg-neutral-200" />
+            </div>
 
             <div className="grid sm:grid-cols-2 gap-5">
               <Field

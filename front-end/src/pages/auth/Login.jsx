@@ -1,7 +1,7 @@
-
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Turnstile } from '@marsidev/react-turnstile';
+import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../../context/AuthContext';
 import { ArrowLeft } from 'lucide-react';
 import { AuthShell, Field, PrimaryButton, FormError, stepAnim } from '../../components/AuthUI';
@@ -14,7 +14,7 @@ const copy = {
 };
 
 export default function Login() {
-  const { login, forgotPassword, resetPassword } = useAuth();
+  const { login, googleLogin, forgotPassword, resetPassword } = useAuth();
   const navigate = useNavigate();
 
   const [view, setView] = useState('login');
@@ -58,7 +58,7 @@ export default function Login() {
     }
   };
 
-  // LOGIN
+  // LOGIN WITH EMAIL AND PASSWORD
   const handleLogin = (e) => {
     e.preventDefault();
 
@@ -69,7 +69,6 @@ export default function Login() {
 
     run(async () => {
       try {
-        // Send CAPTCHA token to backend
         await login(email, password, captchaToken);
         navigate('/');
       } catch (err) {
@@ -85,6 +84,23 @@ export default function Login() {
         resetCaptcha();
       }
     });
+  };
+
+  // LOGIN WITH GOOGLE
+  const handleGoogleSuccess = (credentialResponse) => {
+    if (!credentialResponse?.credential) {
+      setError('Google did not return an authentication credential. Please try again.');
+      return;
+    }
+
+    run(async () => {
+      await googleLogin(credentialResponse.credential);
+      navigate('/');
+    });
+  };
+
+  const handleGoogleError = () => {
+    setError('Google sign-in was unsuccessful. Please try again.');
   };
 
   // FORGOT PASSWORD
@@ -222,6 +238,24 @@ export default function Login() {
             <PrimaryButton type="submit" loading={loading}>
               Sign in
             </PrimaryButton>
+
+            <div className="flex items-center gap-3" aria-hidden="true">
+              <div className="h-px flex-1 bg-neutral-200" />
+              <span className="text-xs uppercase tracking-wider text-neutral-400">or</span>
+              <div className="h-px flex-1 bg-neutral-200" />
+            </div>
+
+            <div className={`flex justify-center ${loading ? 'pointer-events-none opacity-60' : ''}`}>
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={handleGoogleError}
+                theme="outline"
+                size="large"
+                text="continue_with"
+                shape="rectangular"
+                width="350"
+              />
+            </div>
 
             <p className="text-sm text-neutral-500 text-center">
               New here?{' '}
