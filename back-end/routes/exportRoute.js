@@ -4,13 +4,13 @@ import { exportDashboard } from "../controllers/exportController.js";
 
 import { isadmin } from "../middleware/adminoruser.js";
 
-import { verifyToken } from "../middleware/jwt.js"  
+import { verify } from "../middleware/jwt.js"  
 
 const router = express.Router();
 
 router.get(
   "/dashboard",
-  verifyToken,
+  verify,
   isadmin,
   exportDashboard
 );
