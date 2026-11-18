@@ -1,5 +1,10 @@
 
 import { PrismaClient } from "@prisma/client";
+import {
+    getOrSetCache,
+    invalidateCategoryCache,
+    invalidateProductCache
+} from "../utils/cache.js";
 
 const prisma = new PrismaClient();
 
@@ -20,6 +25,11 @@ export const createcat = async (req, res) => {
             }
         });
 
+        await Promise.all([
+            invalidateCategoryCache(),
+            invalidateProductCache()
+        ]);
+
         return res.status(201).json({
             message: "Category created!",
             category
@@ -38,14 +48,20 @@ export const getallcat = async (req, res) => {
     const limit = 20;
 
     try {
-        const categories = await prisma.Category.findMany({
-            skip: (page - 1) * limit,
-            take: limit,
-            orderBy: [
-                { createdAt: "desc" },
-                { id: "desc" }
-            ]
-        });
+        const categories = await getOrSetCache(
+            `categories:list:page:${page}`,
+            300,
+            async () => {
+                return await prisma.Category.findMany({
+                    skip: (page - 1) * limit,
+                    take: limit,
+                    orderBy: [
+                        { createdAt: "desc" },
+                        { id: "desc" }
+                    ]
+                });
+            }
+        );
 
         return res.status(200).json(categories);
 
@@ -61,19 +77,25 @@ export const getone = async (req, res) => {
     const { id } = req.params;
 
     try {
-        const category = await prisma.Category.findUnique({
-            where: {
-                id: Number(id)
-            },
-            include: {
-                products: {
-                    take: 20,
-                    orderBy: {
-                        id: "desc"
+        const category = await getOrSetCache(
+            `categories:one:${id}`,
+            300,
+            async () => {
+                return await prisma.Category.findUnique({
+                    where: {
+                        id: Number(id)
+                    },
+                    include: {
+                        products: {
+                            take: 20,
+                            orderBy: {
+                                id: "desc"
+                            }
+                        }
                     }
-                }
+                });
             }
-        });
+        );
 
         if (!category) {
             return res.status(404).json({
@@ -106,6 +128,11 @@ export const updatecat = async (req, res) => {
             }
         });
 
+        await Promise.all([
+            invalidateCategoryCache(),
+            invalidateProductCache()
+        ]);
+
         return res.status(200).json({
             message: "Category updated!",
             category: updatedCategory
@@ -134,6 +161,11 @@ export const deletecat = async (req, res) => {
                 id: Number(id)
             }
         });
+
+        await Promise.all([
+            invalidateCategoryCache(),
+            invalidateProductCache()
+        ]);
 
         return res.status(200).json({
             message: "Category deleted!"

@@ -1,8 +1,16 @@
+
 import { PrismaClient } from "@prisma/client";
 import {
     uploadProductImage,
     deleteCloudinaryImage
 } from "../services/productImages.js";
+
+import {
+    getOrSetCache,
+    invalidateProductCache,
+    invalidateCategoryCache,
+    invalidateDashboardCache
+} from "../utils/cache.js";
 
 const prisma = new PrismaClient();
 
@@ -78,6 +86,12 @@ export const createproduct = async (req, res) => {
             }
         });
 
+        await Promise.all([
+            invalidateProductCache(),
+            invalidateCategoryCache(),
+            invalidateDashboardCache()
+        ]);
+
         return res.status(201).json({
             message: "product created",
             product
@@ -124,6 +138,12 @@ export const updateproduct = async (req, res) => {
             },
             data
         });
+
+        await Promise.all([
+            invalidateProductCache(),
+            invalidateCategoryCache(),
+            invalidateDashboardCache()
+        ]);
 
         return res.status(200).json({
             message: "product updated",
@@ -173,6 +193,12 @@ export const deleteproduct = async (req, res) => {
                 where: { id }
             });
         });
+
+        await Promise.all([
+            invalidateProductCache(),
+            invalidateCategoryCache(),
+            invalidateDashboardCache()
+        ]);
 
         // Cloudinary cleanup happens after the database deletion.
         // A failed cleanup does not leave broken photo records in the DB.
@@ -233,25 +259,39 @@ export const getallproduct = async (req, res) => {
             where.categoryid = Number(categoryid);
         }
 
-        const all = await prisma.Product.findMany({
-            where,
-            skip,
-            take: limit,
+        const cacheKey = [
+            "products:list",
+            `search:${encodeURIComponent(String(search || ""))}`,
+            `category:${categoryid || "all"}`,
+            `skip:${skip}`,
+            `limit:${limit}`
+        ].join(":");
 
-            orderBy: [
-                { createdAt: "desc" },
-                { id: "desc" }
-            ],
+        const all = await getOrSetCache(
+            cacheKey,
+            60,
+            async () => {
+                return await prisma.Product.findMany({
+                    where,
+                    skip,
+                    take: limit,
 
-            include: {
-                productphoto: {
-                    orderBy: {
-                        id: "asc"
+                    orderBy: [
+                        { createdAt: "desc" },
+                        { id: "desc" }
+                    ],
+
+                    include: {
+                        productphoto: {
+                            orderBy: {
+                                id: "asc"
+                            }
+                        },
+                        category: true
                     }
-                },
-                category: true
+                });
             }
-        });
+        );
 
         return res.status(200).json(all);
 
@@ -269,21 +309,27 @@ export const getoneproduct = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const one = await prisma.Product.findUnique({
-            where: {
-                id: Number(id)
-            },
+        const one = await getOrSetCache(
+            `products:one:${id}`,
+            120,
+            async () => {
+                return await prisma.Product.findUnique({
+                    where: {
+                        id: Number(id)
+                    },
 
-            include: {
-                category: true,
+                    include: {
+                        category: true,
 
-                productphoto: {
-                    orderBy: {
-                        id: "asc"
+                        productphoto: {
+                            orderBy: {
+                                id: "asc"
+                            }
+                        }
                     }
-                }
+                });
             }
-        });
+        );
 
         if (!one) {
             return res.status(404).json({

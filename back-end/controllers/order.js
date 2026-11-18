@@ -1,6 +1,11 @@
 
 import { PrismaClient } from "@prisma/client";
 
+import {
+    invalidateDashboardCache,
+    invalidateProductCache
+} from "../utils/cache.js";
+
 const prisma = new PrismaClient();
 
 const getPagination = (query) => {
@@ -156,6 +161,11 @@ export const createorder = async (req, res) => {
             });
         });
 
+        await Promise.all([
+            invalidateDashboardCache(),
+            invalidateProductCache()
+        ]);
+
         return res.status(201).json({
             message: "order created",
             order: fullOrder
@@ -256,6 +266,8 @@ export const changetocomplete = async (req, res) => {
             data: { status: "COMPLETED" }
         });
 
+        await invalidateDashboardCache();
+
         return res.status(200).json({
             message: "order completed",
             order
@@ -285,6 +297,8 @@ export const changetodisapprove = async (req, res) => {
             where: { id: Number(id) },
             data: { status: "DISAPPROVED" }
         });
+
+        await invalidateDashboardCache();
 
         return res.status(200).json({
             message: "order disapproved",
@@ -316,6 +330,11 @@ export const changestock = async (req, res) => {
             where: { id: Number(id) },
             data: { Stock: Number(stock) }
         });
+
+        await Promise.all([
+            invalidateDashboardCache(),
+            invalidateProductCache()
+        ]);
 
         return res.status(200).json({
             message: "stock changed",

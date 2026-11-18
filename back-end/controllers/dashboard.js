@@ -1,5 +1,6 @@
 
 import { PrismaClient } from "@prisma/client";
+import { getOrSetCache } from "../utils/cache.js";
 
 const prisma = new PrismaClient();
 
@@ -16,14 +17,22 @@ const getPagination = (query) => {
 
 export const revenue = async (req, res) => {
     try {
-        const result = await prisma.Order.aggregate({
-            _sum: {
-                total: true
+        const totalRevenue = await getOrSetCache(
+            "dashboard:revenue",
+            60,
+            async () => {
+                const result = await prisma.Order.aggregate({
+                    _sum: {
+                        total: true
+                    }
+                });
+
+                return result._sum.total || 0;
             }
-        });
+        );
 
         return res.status(200).json({
-            totalRevenue: result._sum.total || 0
+            totalRevenue
         });
 
     } catch (error) {
@@ -153,11 +162,17 @@ export const completedorders = async (req, res) => {
 
 export const totalcustomers = async (req, res) => {
     try {
-        const allcustomers = await prisma.User.count({
-            where: {
-                role: "user"
+        const allcustomers = await getOrSetCache(
+            "dashboard:totalcustomers",
+            60,
+            async () => {
+                return await prisma.User.count({
+                    where: {
+                        role: "user"
+                    }
+                });
             }
-        });
+        );
 
         return res.status(200).json(allcustomers);
 
@@ -171,7 +186,13 @@ export const totalcustomers = async (req, res) => {
 
 export const totalproducts = async (req, res) => {
     try {
-        const allproducts = await prisma.Product.count();
+        const allproducts = await getOrSetCache(
+            "dashboard:totalproducts",
+            60,
+            async () => {
+                return await prisma.Product.count();
+            }
+        );
 
         return res.status(200).json(allproducts);
 
@@ -188,31 +209,41 @@ export const lowstock = async (req, res) => {
     const { page, limit, skip } = getPagination(req.query);
 
     try {
-        const where = {
-            Stock: {
-                lt: s
+        const cacheKey = `dashboard:lowstock:page:${page}:limit:${limit}`;
+
+        const result = await getOrSetCache(
+            cacheKey,
+            30,
+            async () => {
+                const where = {
+                    Stock: {
+                        lt: s
+                    }
+                };
+
+                const [products, count] = await Promise.all([
+                    prisma.Product.findMany({
+                        where,
+                        skip,
+                        take: limit,
+                        orderBy: [
+                            { Stock: "asc" },
+                            { id: "asc" }
+                        ]
+                    }),
+                    prisma.Product.count({ where })
+                ]);
+
+                return {
+                    products,
+                    count,
+                    page,
+                    totalPages: Math.ceil(count / limit)
+                };
             }
-        };
+        );
 
-        const [products, count] = await Promise.all([
-            prisma.Product.findMany({
-                where,
-                skip,
-                take: limit,
-                orderBy: [
-                    { Stock: "asc" },
-                    { id: "asc" }
-                ]
-            }),
-            prisma.Product.count({ where })
-        ]);
-
-        return res.status(200).json({
-            products,
-            count,
-            page,
-            totalPages: Math.ceil(count / limit)
-        });
+        return res.status(200).json(result);
 
     } catch (error) {
         console.error(error);
@@ -226,28 +257,38 @@ export const outofstock = async (req, res) => {
     const { page, limit, skip } = getPagination(req.query);
 
     try {
-        const where = {
-            Stock: 0
-        };
+        const cacheKey = `dashboard:outofstock:page:${page}:limit:${limit}`;
 
-        const [products, count] = await Promise.all([
-            prisma.Product.findMany({
-                where,
-                skip,
-                take: limit,
-                orderBy: {
-                    id: "asc"
-                }
-            }),
-            prisma.Product.count({ where })
-        ]);
+        const result = await getOrSetCache(
+            cacheKey,
+            30,
+            async () => {
+                const where = {
+                    Stock: 0
+                };
 
-        return res.status(200).json({
-            products,
-            count,
-            page,
-            totalPages: Math.ceil(count / limit)
-        });
+                const [products, count] = await Promise.all([
+                    prisma.Product.findMany({
+                        where,
+                        skip,
+                        take: limit,
+                        orderBy: {
+                            id: "asc"
+                        }
+                    }),
+                    prisma.Product.count({ where })
+                ]);
+
+                return {
+                    products,
+                    count,
+                    page,
+                    totalPages: Math.ceil(count / limit)
+                };
+            }
+        );
+
+        return res.status(200).json(result);
 
     } catch (error) {
         console.error(error);
