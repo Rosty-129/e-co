@@ -1,4 +1,3 @@
-
 import { google } from "googleapis";
 import { PrismaClient } from "@prisma/client";
 import jwt from "jsonwebtoken";
@@ -11,16 +10,41 @@ import {
 const prisma = new PrismaClient();
 
 const getGoogleClient = () => {
+    const clientId = process.env.GOOGLE_CLIENT_ID_DOCS;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET_DOCS;
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI_DOCS;
+
+    if (!clientId || !clientSecret || !redirectUri) {
+        throw new Error("Missing Google OAuth environment variables");
+    }
+
     return new google.auth.OAuth2(
-        process.env.GOOGLE_CLIENT_ID_DOCS,
-        process.env.GOOGLE_CLIENT_SECRET_DOCS,
-        process.env.GOOGLE_REDIRECT_URI_DOCS
+        clientId,
+        clientSecret,
+        redirectUri
     );
 };
+
+const getFrontendUrl = () => {
+    const url = process.env.FRONTEND_URL;
+
+    if (!url) {
+        throw new Error("Missing FRONTEND_URL environment variable");
+    }
+
+    return url.replace(/\/$/, "");
+};
+
 
 // START GOOGLE CONNECTION
 export const connectGoogle = async (req, res) => {
     try {
+        if (!req.user?.id) {
+            return res.status(401).json({
+                message: "Authentication required"
+            });
+        }
+
         const state = jwt.sign(
             {
                 userId: req.user.id,
@@ -56,17 +80,25 @@ export const connectGoogle = async (req, res) => {
 
 // GOOGLE CALLBACK
 export const googleCallback = async (req, res) => {
+    const frontendUrl = process.env.FRONTEND_URL?.replace(/\/$/, "");
+
     try {
+        if (!frontendUrl) {
+            throw new Error("Missing FRONTEND_URL environment variable");
+        }
+
         const { code, state, error } = req.query;
 
         if (error) {
             return res.redirect(
-                `${process.env.FRONTEND_URL}/admin/dashboard?google=denied`
+                `${frontendUrl}/admin/dashboard?google=denied`
             );
         }
 
         if (!code || !state) {
-            return res.status(400).send("Missing OAuth parameters");
+            return res.redirect(
+                `${frontendUrl}/admin/dashboard?google=error`
+            );
         }
 
         const decoded = jwt.verify(
@@ -74,8 +106,11 @@ export const googleCallback = async (req, res) => {
             process.env.JWT_SECRET
         );
 
-        if (decoded.purpose !== "google-oauth") {
-            return res.status(400).send("Invalid OAuth state");
+        if (
+            decoded.purpose !== "google-oauth" ||
+            !decoded.userId
+        ) {
+            throw new Error("Invalid OAuth state");
         }
 
         const admin = await prisma.user.findUnique({
@@ -92,13 +127,25 @@ export const googleCallback = async (req, res) => {
 
         const { tokens } = await oauth2Client.getToken(code);
 
-        if (!tokens.refresh_token) {
-            throw new Error("Google did not return a refresh token");
+        // Preserve an existing refresh token if Google doesn't return a new one.
+        const existingConnection = await prisma.googleConnection.findUnique({
+            where: {
+                userId: admin.id
+            }
+        });
+
+        const refreshToken = tokens.refresh_token
+            || (
+                existingConnection
+                    ? decryptToken(existingConnection.refreshTokenEncrypted)
+                    : null
+            );
+
+        if (!refreshToken) {
+            throw new Error("Google did not provide a refresh token");
         }
 
-        const encryptedToken = encryptToken(
-            tokens.refresh_token
-        );
+        const encryptedToken = encryptToken(refreshToken);
 
         await prisma.googleConnection.upsert({
             where: {
@@ -114,15 +161,19 @@ export const googleCallback = async (req, res) => {
         });
 
         return res.redirect(
-            `${process.env.FRONTEND_URL}/admin/dashboard?google=connected`
+            `${frontendUrl}/admin/dashboard?google=connected`
         );
 
     } catch (error) {
         console.error("Google callback error:", error);
 
-        return res.redirect(
-            `${process.env.FRONTEND_URL}/admin/dashboard?google=error`
-        );
+        if (frontendUrl) {
+            return res.redirect(
+                `${frontendUrl}/admin/dashboard?google=error`
+            );
+        }
+
+        return res.status(500).send("Google OAuth callback failed");
     }
 };
 
@@ -144,7 +195,7 @@ export const googleConnectionStatus = async (req, res) => {
         });
 
     } catch (error) {
-        console.error(error);
+        console.error("Google status error:", error);
 
         return res.status(500).json({
             message: "Could not check Google connection"
@@ -183,7 +234,7 @@ export const exportDashboardToGoogle = async (req, res) => {
             auth: oauth2Client
         });
 
-        // Fetch fresh database statistics
+        // Fetch fresh dashboard statistics from PostgreSQL
         const [
             revenue,
             totalOrders,
@@ -242,7 +293,7 @@ export const exportDashboardToGoogle = async (req, res) => {
         const rows = [
             ["E-Co Dashboard Report", "Value"],
             ["Generated At", new Date().toISOString()],
-            ["Total Revenue", revenue._sum.total || 0],
+            ["Total Revenue", Number(revenue._sum.total || 0)],
             ["Total Orders", totalOrders],
             ["Pending Orders", pendingOrders],
             ["Completed Orders", completedOrders],
@@ -252,7 +303,7 @@ export const exportDashboardToGoogle = async (req, res) => {
             ["Out of Stock Products", outOfStock]
         ];
 
-        // Create spreadsheet
+        // Create Google spreadsheet
         const spreadsheet = await sheets.spreadsheets.create({
             requestBody: {
                 properties: {
@@ -280,7 +331,7 @@ export const exportDashboardToGoogle = async (req, res) => {
 
         return res.json({
             success: true,
-            url: spreadsheet.data.spreadsheetUrl
+            spreadsheetUrl: spreadsheet.data.spreadsheetUrl
         });
 
     } catch (error) {
