@@ -10,6 +10,8 @@ import {
   CheckCircle,
   Download,
   Loader2,
+  FileSpreadsheet,
+  Check,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -32,17 +34,48 @@ export default function Dashboard() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [connectingGoogle, setConnectingGoogle] = useState(false);
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [checkingGoogle, setCheckingGoogle] = useState(true);
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('authtoken');
+
+    return {
+      Authorization: `Bearer ${token}`,
+    };
+  };
+
+  // Check whether this admin has connected Google Drive
+  const checkGoogleConnection = async () => {
+    try {
+      const response = await fetch(`${API}/export/google/status`, {
+        headers: getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error('Could not check Google connection.');
+      }
+
+      const data = await response.json();
+      setGoogleConnected(data.connected === true);
+    } catch (error) {
+      console.error('Google connection check error:', error);
+      setGoogleConnected(false);
+    } finally {
+      setCheckingGoogle(false);
+    }
+  };
+
+  // Load dashboard data
   useEffect(() => {
     if (user?.role !== 'ADMIN') {
       setLoading(false);
+      setCheckingGoogle(false);
       return;
     }
 
-    const token = localStorage.getItem('authtoken');
-    const headers = {
-      Authorization: `Bearer ${token}`,
-    };
+    const headers = getAuthHeaders();
 
     Promise.all([
       fetch(`${API}/dashboard/revenue`, { headers })
@@ -92,48 +125,53 @@ export default function Dashboard() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+
+    checkGoogleConnection();
   }, [user]);
 
-  // Export dashboard data as an Excel file
-  const handleExport = async () => {
+  // Redirect admin to Google OAuth
+  const handleGoogleConnect = async () => {
+    try {
+      setConnectingGoogle(true);
+
+      const response = await fetch(`${API}/export/google/connect`, {
+        headers: getAuthHeaders(),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.url) {
+        throw new Error(data.message || 'Could not connect Google Drive.');
+      }
+
+      window.location.assign(data.url);
+    } catch (error) {
+      console.error('Google connection error:', error);
+      alert(error.message || 'Could not connect Google Drive.');
+      setConnectingGoogle(false);
+    }
+  };
+
+  // Generate a Google Sheet and redirect to it
+  const handleGoogleExport = async () => {
     try {
       setExporting(true);
 
-      const token = localStorage.getItem('authtoken');
-
-      const response = await fetch(`${API}/export/dashboard`, {
+      const response = await fetch(`${API}/export/google`, {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to export dashboard data.');
+      const data = await response.json();
+
+      if (!response.ok || !data.spreadsheetUrl) {
+        throw new Error(data.message || 'Failed to export dashboard.');
       }
 
-      // Convert the response into a downloadable Excel file
-      const blob = await response.blob();
-
-      // Create a temporary download URL
-      const url = window.URL.createObjectURL(blob);
-
-      // Create a temporary link and click it
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `e-co-dashboard-${new Date()
-        .toISOString()
-        .slice(0, 10)}.xlsx`;
-
-      document.body.appendChild(link);
-      link.click();
-
-      // Clean up
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      window.open(data.spreadsheetUrl, '_blank', 'noopener,noreferrer');
     } catch (error) {
-      console.error('Export error:', error);
-      alert('Could not export dashboard. Please try again.');
+      console.error('Google Sheets export error:', error);
+      alert(error.message || 'Could not export dashboard to Google Sheets.');
     } finally {
       setExporting(false);
     }
@@ -184,7 +222,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      {/* Dashboard heading and export button */}
+      {/* Dashboard heading and Google Sheets buttons */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-medium tracking-tight text-black">
@@ -198,20 +236,58 @@ export default function Dashboard() {
           </p>
         </div>
 
-        <button
-          onClick={handleExport}
-          disabled={exporting || loading || user?.role !== 'ADMIN'}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
-        >
-          {exporting ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <Download size={16} />
-          )}
+        {user?.role === 'ADMIN' && (
+          <div className="flex flex-col sm:flex-row gap-2">
+            {checkingGoogle ? (
+              <button
+                disabled
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-black rounded-lg text-sm opacity-50"
+              >
+                <Loader2 size={16} className="animate-spin" />
+                Checking Google...
+              </button>
+            ) : googleConnected ? (
+              <button
+                onClick={handleGoogleExport}
+                disabled={exporting || loading}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                {exporting ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <FileSpreadsheet size={16} />
+                )}
 
-          {exporting ? 'Exporting...' : 'Export to Excel'}
-        </button>
+                {exporting ? 'Creating Sheet...' : 'Export to Google Sheets'}
+              </button>
+            ) : (
+              <button
+                onClick={handleGoogleConnect}
+                disabled={connectingGoogle}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                {connectingGoogle ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <FileSpreadsheet size={16} />
+                )}
+
+                {connectingGoogle
+                  ? 'Connecting...'
+                  : 'Connect Google Drive'}
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Google connection status */}
+      {user?.role === 'ADMIN' && googleConnected && (
+        <div className="flex items-center gap-2 text-sm text-green-700">
+          <Check size={16} />
+          Google Drive is connected.
+        </div>
+      )}
 
       {/* Dashboard statistics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -12,7 +12,7 @@ import productRoutes from "./routes/productsroute.js";
 import profileRoutes from "./routes/profileroute.js";
 import reviewRoutes from "./routes/reviewroute.js";
 import exportRoute from "./routes/exportRoute.js";
-
+import googleExportRoute from "./routes/googleExportRoute.js";
 const app = express();
 
 // Trust Vercel's proxy so Express can identify the real client IP
@@ -77,6 +77,8 @@ app.use("/images", imagesRoutes);
 app.use("/dashboard", dashboardRoutes);
 
 app.use("/export", exportRoute);
+
+app.use("/export/google", googleExportRoute);
 
 // Export for Vercel serverless
 export default app;
