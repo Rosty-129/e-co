@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
@@ -13,6 +14,7 @@ export default function Checkout() {
 
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [formData, setFormData] = useState({
     firstname: user?.firstname || '',
     lastname: user?.lastname || '',
@@ -22,13 +24,22 @@ export default function Checkout() {
     notes: '',
   });
 
-  const total = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  const total = cart.reduce(
+    (sum, item) => sum + item.product.price * item.quantity,
+    0
+  );
 
   if (cart.length === 0 && step !== 3) {
     return (
       <div className="max-w-lg mx-auto text-center py-16">
-        <h1 className="text-xl font-medium mb-3 text-black">Your cart is empty.</h1>
-        <p className="text-gray-500 mb-6">Add products before proceeding to checkout.</p>
+        <h1 className="text-xl font-medium mb-3 text-black">
+          Your cart is empty.
+        </h1>
+
+        <p className="text-gray-500 mb-6">
+          Add products before proceeding to checkout.
+        </p>
+
         <Link
           to="/products"
           className="inline-block bg-black text-white px-4 py-2 rounded font-medium text-sm hover:bg-white hover:text-black border-2 border-black transition"
@@ -40,14 +51,17 @@ export default function Checkout() {
   }
 
   const handleInputChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
   };
 
   const handleConfirmOrder = async (e) => {
     e.preventDefault();
 
     if (!user) {
-      alert("Please sign in to place an order.");
+      alert('Please sign in to place an order.');
       navigate('/login');
       return;
     }
@@ -55,22 +69,22 @@ export default function Checkout() {
     setIsSubmitting(true);
 
     try {
+      // Match the backend Zod createOrderSchema
       const orderPayload = {
-        userid: user.id,
-        address: formData.address,
-        total: total,
-        items: cart.map(item => ({
+        address: formData.address.trim(),
+
+        items: cart.map((item) => ({
           productid: item.productid,
           quantity: item.quantity,
-          unitPrice: item.product.price,
-        }))
+        })),
       };
 
       await addOrder(orderPayload);
+
       clearCart();
       setStep(3);
     } catch (err) {
-      alert("Failed to place order: " + err.message);
+      alert('Failed to place order: ' + err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -82,10 +96,15 @@ export default function Checkout() {
         <div className="inline-flex items-center justify-center w-14 h-14 rounded-full border-2 border-black bg-white text-black mb-4">
           <CheckCircle2 size={30} />
         </div>
-        <h1 className="text-2xl font-medium mb-2 text-black">Order Confirmed</h1>
+
+        <h1 className="text-2xl font-medium mb-2 text-black">
+          Order Confirmed
+        </h1>
+
         <p className="text-gray-500 text-sm mb-6">
           Your order has been recorded. Payment is in person upon receipt or pickup.
         </p>
+
         <div className="flex gap-4 justify-center">
           <Link
             to="/orders"
@@ -93,6 +112,7 @@ export default function Checkout() {
           >
             View your orders
           </Link>
+
           <Link
             to="/products"
             className="bg-white text-black border-2 border-black px-4 py-2 rounded text-sm font-medium hover:bg-black hover:text-white transition"
@@ -113,27 +133,44 @@ export default function Checkout() {
         <ArrowLeft size={16} /> Back to products
       </Link>
 
-      <h1 className="text-2xl font-medium mb-6 text-black">Checkout (In-Person Payment)</h1>
+      <h1 className="text-2xl font-medium mb-6 text-black">
+        Checkout (In-Person Payment)
+      </h1>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+
         {/* Main flow */}
         <div className="md:col-span-2 space-y-6">
+
           {step === 1 && (
             <div className="border-2 border-black rounded-lg p-6 bg-white">
-              <h2 className="font-medium text-lg mb-4 text-black">1. Review Items</h2>
+              <h2 className="font-medium text-lg mb-4 text-black">
+                1. Review Items
+              </h2>
+
               <div className="divide-y divide-black/10 mb-6">
                 {cart.map((item) => (
-                  <div key={item.productid} className="py-3 flex justify-between items-center text-sm">
+                  <div
+                    key={item.productid}
+                    className="py-3 flex justify-between items-center text-sm"
+                  >
                     <div>
-                      <p className="font-medium text-gray-800">{item.product.name}</p>
-                      <p className="text-gray-500">Qty: {item.quantity} × ${item.product.price}</p>
+                      <p className="font-medium text-gray-800">
+                        {item.product.name}
+                      </p>
+
+                      <p className="text-gray-500">
+                        Qty: {item.quantity} × ${item.product.price}
+                      </p>
                     </div>
+
                     <span className="font-medium text-gray-800">
                       ${(item.quantity * item.product.price).toFixed(2)}
                     </span>
                   </div>
                 ))}
               </div>
+
               <button
                 onClick={() => setStep(2)}
                 className="w-full py-2 bg-black text-white font-medium rounded text-sm border-2 border-black hover:bg-white hover:text-black transition"
@@ -149,7 +186,10 @@ export default function Checkout() {
               className="border-2 border-black rounded-lg p-6 bg-white space-y-4"
             >
               <div className="flex justify-between items-center border-b border-black/10 pb-3">
-                <h2 className="font-medium text-lg text-black">2. Delivery Details</h2>
+                <h2 className="font-medium text-lg text-black">
+                  2. Delivery Details
+                </h2>
+
                 <button
                   type="button"
                   onClick={() => setStep(1)}
@@ -161,7 +201,10 @@ export default function Checkout() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-black mb-1">First Name</label>
+                  <label className="block text-xs font-semibold text-black mb-1">
+                    First Name
+                  </label>
+
                   <input
                     type="text"
                     name="firstname"
@@ -171,8 +214,12 @@ export default function Checkout() {
                     className="w-full p-2 border-2 border-black rounded bg-white text-sm text-gray-800 focus:outline-none"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-xs font-semibold text-black mb-1">Last Name</label>
+                  <label className="block text-xs font-semibold text-black mb-1">
+                    Last Name
+                  </label>
+
                   <input
                     type="text"
                     name="lastname"
@@ -185,7 +232,10 @@ export default function Checkout() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-black mb-1">Email Address</label>
+                <label className="block text-xs font-semibold text-black mb-1">
+                  Email Address
+                </label>
+
                 <input
                   type="email"
                   name="email"
@@ -197,12 +247,15 @@ export default function Checkout() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-black mb-1">Phone Number</label>
+                <label className="block text-xs font-semibold text-black mb-1">
+                  Phone Number
+                </label>
+
                 <input
                   type="text"
                   name="phone"
                   required
-                  placeholder="e.g. +1 555-0199"
+                  placeholder="e.g. +213 555 123 456"
                   value={formData.phone}
                   onChange={handleInputChange}
                   className="w-full p-2 border-2 border-black rounded bg-white text-sm text-gray-800 focus:outline-none"
@@ -210,10 +263,15 @@ export default function Checkout() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-black mb-1">Delivery Address</label>
+                <label className="block text-xs font-semibold text-black mb-1">
+                  Delivery Address
+                </label>
+
                 <textarea
                   name="address"
                   required
+                  minLength={5}
+                  maxLength={500}
                   rows="2"
                   placeholder="Street address, city, postal code"
                   value={formData.address}
@@ -223,8 +281,13 @@ export default function Checkout() {
               </div>
 
               <div className="p-3 bg-black/5 border border-black/10 rounded text-xs text-gray-700 space-y-1">
-                <p className="font-semibold text-black">Payment method: In Person</p>
-                <p>No card required online. Cash/card accepted at delivery/pickup.</p>
+                <p className="font-semibold text-black">
+                  Payment method: In Person
+                </p>
+
+                <p>
+                  No card required online. Cash/card accepted at delivery/pickup.
+                </p>
               </div>
 
               <button
@@ -240,22 +303,28 @@ export default function Checkout() {
 
         {/* Summary sidebar */}
         <div className="border-2 border-black rounded-lg p-6 bg-white h-fit space-y-4">
-          <h3 className="font-medium border-b border-black/10 pb-3 text-black">Order Summary</h3>
+          <h3 className="font-medium border-b border-black/10 pb-3 text-black">
+            Order Summary
+          </h3>
+
           <div className="space-y-2 text-sm">
             <div className="flex justify-between text-gray-500">
               <span>Subtotal</span>
               <span>${total.toFixed(2)}</span>
             </div>
+
             <div className="flex justify-between text-gray-500">
               <span>Delivery Fee</span>
               <span>$0.00</span>
             </div>
+
             <div className="flex justify-between font-medium text-base pt-2 border-t border-black/10 text-black">
               <span>Total</span>
               <span>${total.toFixed(2)}</span>
             </div>
           </div>
         </div>
+
       </div>
     </div>
   );
