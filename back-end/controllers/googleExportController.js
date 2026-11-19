@@ -1,3 +1,4 @@
+
 import { google } from "googleapis";
 import { PrismaClient } from "@prisma/client";
 import jwt from "jsonwebtoken";
@@ -29,19 +30,18 @@ const getFrontendUrl = () => {
     const url = process.env.FRONTEND_URL;
 
     if (!url) {
-        throw new Error("Missing FRONTEND_URL environment variable");
+        throw new Error("Missing FRONTEND_URL");
     }
 
     return url.replace(/\/$/, "");
 };
 
-
-// START GOOGLE CONNECTION
+// 1. START GOOGLE CONNECTION
 export const connectGoogle = async (req, res) => {
     try {
-        if (!req.user?.id) {
-            return res.status(401).json({
-                message: "Authentication required"
+        if (!req.user?.id || req.user.role !== "ADMIN") {
+            return res.status(403).json({
+                message: "Admin access required"
             });
         }
 
@@ -60,7 +60,7 @@ export const connectGoogle = async (req, res) => {
             access_type: "offline",
             prompt: "consent",
             scope: [
-                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/documents",
                 "https://www.googleapis.com/auth/drive.file"
             ],
             state
@@ -77,14 +77,13 @@ export const connectGoogle = async (req, res) => {
     }
 };
 
-
-// GOOGLE CALLBACK
+// 2. GOOGLE OAUTH CALLBACK
 export const googleCallback = async (req, res) => {
     const frontendUrl = process.env.FRONTEND_URL?.replace(/\/$/, "");
 
     try {
         if (!frontendUrl) {
-            throw new Error("Missing FRONTEND_URL environment variable");
+            throw new Error("Missing FRONTEND_URL");
         }
 
         const { code, state, error } = req.query;
@@ -127,15 +126,17 @@ export const googleCallback = async (req, res) => {
 
         const { tokens } = await oauth2Client.getToken(code);
 
-        // Preserve an existing refresh token if Google doesn't return a new one.
+        // Preserve the previous refresh token if Google doesn't
+        // return a new one.
         const existingConnection = await prisma.googleConnection.findUnique({
             where: {
                 userId: admin.id
             }
         });
 
-        const refreshToken = tokens.refresh_token
-            || (
+        const refreshToken =
+            tokens.refresh_token ||
+            (
                 existingConnection
                     ? decryptToken(existingConnection.refreshTokenEncrypted)
                     : null
@@ -177,8 +178,7 @@ export const googleCallback = async (req, res) => {
     }
 };
 
-
-// CHECK GOOGLE CONNECTION
+// 3. CHECK GOOGLE CONNECTION
 export const googleConnectionStatus = async (req, res) => {
     try {
         const connection = await prisma.googleConnection.findUnique({
@@ -203,10 +203,16 @@ export const googleConnectionStatus = async (req, res) => {
     }
 };
 
-
-// EXPORT DASHBOARD TO GOOGLE SHEETS
+// 4. EXPORT DASHBOARD TO GOOGLE DOCS
 export const exportDashboardToGoogle = async (req, res) => {
     try {
+        if (!req.user?.id || req.user.role !== "ADMIN") {
+            return res.status(403).json({
+                message: "Admin access required"
+            });
+        }
+
+        // Get the admin's Google connection.
         const connection = await prisma.googleConnection.findUnique({
             where: {
                 userId: req.user.id
@@ -219,6 +225,7 @@ export const exportDashboardToGoogle = async (req, res) => {
             });
         }
 
+        // Decrypt the stored refresh token.
         const refreshToken = decryptToken(
             connection.refreshTokenEncrypted
         );
@@ -229,12 +236,13 @@ export const exportDashboardToGoogle = async (req, res) => {
             refresh_token: refreshToken
         });
 
-        const sheets = google.sheets({
-            version: "v4",
+        // Initialize Google Docs API.
+        const docs = google.docs({
+            version: "v1",
             auth: oauth2Client
         });
 
-        // Fetch fresh dashboard statistics from PostgreSQL
+        // Fetch fresh dashboard statistics.
         const [
             revenue,
             totalOrders,
@@ -290,55 +298,105 @@ export const exportDashboardToGoogle = async (req, res) => {
             })
         ]);
 
-        const rows = [
-            ["E-Co Dashboard Report", "Value"],
-            ["Generated At", new Date().toISOString()],
-            ["Total Revenue", Number(revenue._sum.total || 0)],
-            ["Total Orders", totalOrders],
-            ["Pending Orders", pendingOrders],
-            ["Completed Orders", completedOrders],
-            ["Total Customers", customers],
-            ["Total Products", products],
-            ["Low Stock Products", lowStock],
-            ["Out of Stock Products", outOfStock]
-        ];
+        const totalRevenue = Number(revenue._sum.total || 0);
 
-        // Create Google spreadsheet
-        const spreadsheet = await sheets.spreadsheets.create({
+        // Generate document title.
+        const generatedAt = new Date();
+
+        const date = generatedAt.toLocaleString("en-GB", {
+            dateStyle: "medium",
+            timeStyle: "short",
+            timeZone: "UTC"
+        });
+
+        const documentTitle =
+            `E-Co Dashboard Report - ${generatedAt.toISOString().slice(0, 10)}`;
+
+        // Prepare document content.
+        const content = [
+            "E-CO DASHBOARD REPORT",
+            "",
+            `Generated At: ${date} UTC`,
+            "",
+            "BUSINESS OVERVIEW",
+            "----------------------------------------",
+            `Total Revenue: $${totalRevenue.toFixed(2)}`,
+            `Total Orders: ${totalOrders}`,
+            `Pending Orders: ${pendingOrders}`,
+            `Completed Orders: ${completedOrders}`,
+            "",
+            "CUSTOMER OVERVIEW",
+            "----------------------------------------",
+            `Total Customers: ${customers}`,
+            "",
+            "INVENTORY OVERVIEW",
+            "----------------------------------------",
+            `Total Products: ${products}`,
+            `Low Stock Products: ${lowStock}`,
+            `Out of Stock Products: ${outOfStock}`,
+            "",
+            "----------------------------------------",
+            "Generated automatically by E-Co Admin Dashboard."
+        ].join("\n");
+
+        // Create a new Google Docs document.
+        const document = await docs.documents.create({
             requestBody: {
-                properties: {
-                    title: `E-Co Dashboard ${new Date()
-                        .toISOString()
-                        .slice(0, 10)}`
-                }
+                title: documentTitle
             }
         });
 
-        const spreadsheetId = spreadsheet.data.spreadsheetId;
+        const documentId = document.data.documentId;
 
-        const sheetTitle =
-            spreadsheet.data.sheets?.[0]?.properties?.title || "Sheet1";
+        if (!documentId) {
+            throw new Error("Google Docs did not return a document ID");
+        }
 
-        // Insert dashboard data
-        await sheets.spreadsheets.values.update({
-            spreadsheetId,
-            range: `'${sheetTitle.replace(/'/g, "''")}'!A1`,
-            valueInputOption: "RAW",
+        // Insert dashboard information into the document.
+        await docs.documents.batchUpdate({
+            documentId,
             requestBody: {
-                values: rows
+                requests: [
+                    {
+                        insertText: {
+                            location: {
+                                index: 1
+                            },
+                            text: content
+                        }
+                    },
+                    {
+                        updateParagraphStyle: {
+                            range: {
+                                startIndex: 1,
+                                endIndex: "E-CO DASHBOARD REPORT".length + 1
+                            },
+                            paragraphStyle: {
+                                namedStyleType: "TITLE"
+                            },
+                            fields: "namedStyleType"
+                        }
+                    }
+                ]
             }
         });
 
-        return res.json({
+        // Return the actual Google Docs URL.
+        const documentUrl =
+            `https://docs.google.com/document/d/${documentId}/edit`;
+
+        return res.status(200).json({
             success: true,
-            spreadsheetUrl: spreadsheet.data.spreadsheetUrl
+            documentId,
+            documentUrl,
+            message: "Google Docs report created successfully"
         });
 
     } catch (error) {
-        console.error("Google export error:", error);
+        console.error("Google Docs export error:", error);
 
         return res.status(500).json({
-            message: "Google Sheets export failed"
+            message: "Google Docs export failed"
         });
     }
 };
