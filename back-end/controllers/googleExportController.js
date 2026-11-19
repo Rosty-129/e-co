@@ -2,7 +2,6 @@
 import { google } from "googleapis";
 import { PrismaClient } from "@prisma/client";
 import jwt from "jsonwebtoken";
-
 import {
     encryptToken,
     decryptToken
@@ -11,32 +10,36 @@ import {
 const prisma = new PrismaClient();
 
 const getGoogleClient = () => {
-    const clientId = process.env.GOOGLE_CLIENT_ID_DOCS;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET_DOCS;
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI_DOCS;
+    const {
+        GOOGLE_CLIENT_ID_DOCS,
+        GOOGLE_CLIENT_SECRET_DOCS,
+        GOOGLE_REDIRECT_URI_DOCS
+    } = process.env;
 
-    if (!clientId || !clientSecret || !redirectUri) {
+    if (
+        !GOOGLE_CLIENT_ID_DOCS ||
+        !GOOGLE_CLIENT_SECRET_DOCS ||
+        !GOOGLE_REDIRECT_URI_DOCS
+    ) {
         throw new Error("Missing Google OAuth environment variables");
     }
 
     return new google.auth.OAuth2(
-        clientId,
-        clientSecret,
-        redirectUri
+        GOOGLE_CLIENT_ID_DOCS,
+        GOOGLE_CLIENT_SECRET_DOCS,
+        GOOGLE_REDIRECT_URI_DOCS
     );
 };
 
 const getFrontendUrl = () => {
-    const url = process.env.FRONTEND_URL;
-
-    if (!url) {
+    if (!process.env.FRONTEND_URL) {
         throw new Error("Missing FRONTEND_URL");
     }
 
-    return url.replace(/\/$/, "");
+    return process.env.FRONTEND_URL.replace(/\/+$/, "");
 };
 
-// 1. START GOOGLE CONNECTION
+// 1. Start Google OAuth
 export const connectGoogle = async (req, res) => {
     try {
         if (!req.user?.id || req.user.role !== "ADMIN") {
@@ -67,7 +70,6 @@ export const connectGoogle = async (req, res) => {
         });
 
         return res.json({ url });
-
     } catch (error) {
         console.error("Google connection error:", error);
 
@@ -77,24 +79,16 @@ export const connectGoogle = async (req, res) => {
     }
 };
 
-// 2. GOOGLE OAUTH CALLBACK
+// 2. Google OAuth callback
 export const googleCallback = async (req, res) => {
-    const frontendUrl = process.env.FRONTEND_URL?.replace(/\/$/, "");
+    let frontendUrl;
 
     try {
-        if (!frontendUrl) {
-            throw new Error("Missing FRONTEND_URL");
-        }
+        frontendUrl = getFrontendUrl();
 
         const { code, state, error } = req.query;
 
-        if (error) {
-            return res.redirect(
-                `${frontendUrl}/admin/dashboard?google=denied`
-            );
-        }
-
-        if (!code || !state) {
+        if (error || !code || !state) {
             return res.redirect(
                 `${frontendUrl}/admin/dashboard?google=error`
             );
@@ -123,22 +117,22 @@ export const googleCallback = async (req, res) => {
         }
 
         const oauth2Client = getGoogleClient();
-
         const { tokens } = await oauth2Client.getToken(code);
 
-        // Preserve the previous refresh token if Google doesn't
-        // return a new one.
-        const existingConnection = await prisma.googleConnection.findUnique({
-            where: {
-                userId: admin.id
-            }
-        });
+        const existingConnection =
+            await prisma.googleConnection.findUnique({
+                where: {
+                    userId: admin.id
+                }
+            });
 
         const refreshToken =
             tokens.refresh_token ||
             (
                 existingConnection
-                    ? decryptToken(existingConnection.refreshTokenEncrypted)
+                    ? decryptToken(
+                        existingConnection.refreshTokenEncrypted
+                    )
                     : null
             );
 
@@ -161,10 +155,10 @@ export const googleCallback = async (req, res) => {
             }
         });
 
+        // Return to dashboard and automatically start the export.
         return res.redirect(
-            `${frontendUrl}/admin/dashboard?google=connected`
+            `${frontendUrl}/admin/dashboard?google=connected&autoExport=1`
         );
-
     } catch (error) {
         console.error("Google callback error:", error);
 
@@ -178,7 +172,7 @@ export const googleCallback = async (req, res) => {
     }
 };
 
-// 3. CHECK GOOGLE CONNECTION
+// 3. Check Google connection
 export const googleConnectionStatus = async (req, res) => {
     try {
         const connection = await prisma.googleConnection.findUnique({
@@ -193,7 +187,6 @@ export const googleConnectionStatus = async (req, res) => {
         return res.json({
             connected: Boolean(connection)
         });
-
     } catch (error) {
         console.error("Google status error:", error);
 
@@ -203,7 +196,7 @@ export const googleConnectionStatus = async (req, res) => {
     }
 };
 
-// 4. EXPORT DASHBOARD TO GOOGLE DOCS
+// 4. Export dashboard to Google Docs
 export const exportDashboardToGoogle = async (req, res) => {
     try {
         if (!req.user?.id || req.user.role !== "ADMIN") {
@@ -212,7 +205,6 @@ export const exportDashboardToGoogle = async (req, res) => {
             });
         }
 
-        // Get the admin's Google connection.
         const connection = await prisma.googleConnection.findUnique({
             where: {
                 userId: req.user.id
@@ -221,11 +213,10 @@ export const exportDashboardToGoogle = async (req, res) => {
 
         if (!connection) {
             return res.status(400).json({
-                message: "Connect your Google account first"
+                message: "Google account is not connected"
             });
         }
 
-        // Decrypt the stored refresh token.
         const refreshToken = decryptToken(
             connection.refreshTokenEncrypted
         );
@@ -236,13 +227,11 @@ export const exportDashboardToGoogle = async (req, res) => {
             refresh_token: refreshToken
         });
 
-        // Initialize Google Docs API.
         const docs = google.docs({
             version: "v1",
             auth: oauth2Client
         });
 
-        // Fetch fresh dashboard statistics.
         const [
             revenue,
             totalOrders,
@@ -253,31 +242,22 @@ export const exportDashboardToGoogle = async (req, res) => {
             lowStock,
             outOfStock
         ] = await Promise.all([
-
             prisma.order.aggregate({
-                _sum: {
-                    total: true
-                }
+                _sum: { total: true }
             }),
 
             prisma.order.count(),
 
             prisma.order.count({
-                where: {
-                    status: "PENDING"
-                }
+                where: { status: "PENDING" }
             }),
 
             prisma.order.count({
-                where: {
-                    status: "COMPLETED"
-                }
+                where: { status: "COMPLETED" }
             }),
 
             prisma.user.count({
-                where: {
-                    role: "USER"
-                }
+                where: { role: "USER" }
             }),
 
             prisma.product.count(),
@@ -292,15 +272,11 @@ export const exportDashboardToGoogle = async (req, res) => {
             }),
 
             prisma.product.count({
-                where: {
-                    Stock: 0
-                }
+                where: { Stock: 0 }
             })
         ]);
 
         const totalRevenue = Number(revenue._sum.total || 0);
-
-        // Generate document title.
         const generatedAt = new Date();
 
         const date = generatedAt.toLocaleString("en-GB", {
@@ -312,7 +288,6 @@ export const exportDashboardToGoogle = async (req, res) => {
         const documentTitle =
             `E-Co Dashboard Report - ${generatedAt.toISOString().slice(0, 10)}`;
 
-        // Prepare document content.
         const content = [
             "E-CO DASHBOARD REPORT",
             "",
@@ -335,11 +310,9 @@ export const exportDashboardToGoogle = async (req, res) => {
             `Low Stock Products: ${lowStock}`,
             `Out of Stock Products: ${outOfStock}`,
             "",
-            "----------------------------------------",
             "Generated automatically by E-Co Admin Dashboard."
         ].join("\n");
 
-        // Create a new Google Docs document.
         const document = await docs.documents.create({
             requestBody: {
                 title: documentTitle
@@ -352,16 +325,13 @@ export const exportDashboardToGoogle = async (req, res) => {
             throw new Error("Google Docs did not return a document ID");
         }
 
-        // Insert dashboard information into the document.
         await docs.documents.batchUpdate({
             documentId,
             requestBody: {
                 requests: [
                     {
                         insertText: {
-                            location: {
-                                index: 1
-                            },
+                            location: { index: 1 },
                             text: content
                         }
                     },
@@ -381,7 +351,6 @@ export const exportDashboardToGoogle = async (req, res) => {
             }
         });
 
-        // Return the actual Google Docs URL.
         const documentUrl =
             `https://docs.google.com/document/d/${documentId}/edit`;
 
@@ -391,7 +360,6 @@ export const exportDashboardToGoogle = async (req, res) => {
             documentUrl,
             message: "Google Docs report created successfully"
         });
-
     } catch (error) {
         console.error("Google Docs export error:", error);
 

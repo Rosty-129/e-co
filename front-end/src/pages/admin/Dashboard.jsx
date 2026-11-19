@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { useAuth } from '../../context/AuthContext';
 
@@ -12,7 +12,6 @@ import {
     CheckCircle,
     Loader2,
     FileText,
-    Check,
 } from 'lucide-react';
 
 import { Link } from 'react-router-dom';
@@ -35,11 +34,10 @@ export default function Dashboard() {
 
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
-
     const [exporting, setExporting] = useState(false);
     const [connectingGoogle, setConnectingGoogle] = useState(false);
-    const [googleConnected, setGoogleConnected] = useState(false);
-    const [checkingGoogle, setCheckingGoogle] = useState(true);
+
+    const autoExportStarted = useRef(false);
 
     const getAuthHeaders = () => {
         const token = localStorage.getItem('authtoken');
@@ -49,38 +47,109 @@ export default function Dashboard() {
         };
     };
 
-    // Check Google connection.
-    const checkGoogleConnection = async () => {
+    // Create the Google Docs report and redirect to it.
+    const exportGoogleDoc = async () => {
+        setExporting(true);
+
         try {
-            const response = await fetch(
+            const response = await fetch(`${API}/export/google`, {
+                method: 'GET',
+                headers: getAuthHeaders(),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || !data.documentUrl) {
+                throw new Error(
+                    data.message || 'Failed to create Google Docs report'
+                );
+            }
+
+            window.location.assign(data.documentUrl);
+        } catch (error) {
+            console.error('Google Docs export error:', error);
+            alert(error.message || 'Could not export dashboard to Google Docs');
+            setExporting(false);
+        }
+    };
+
+    // Clicking the button: connect if necessary, otherwise export.
+    const handleGoogleExport = async () => {
+        try {
+            setConnectingGoogle(true);
+
+            const statusResponse = await fetch(
                 `${API}/export/google/status`,
                 {
                     headers: getAuthHeaders(),
                 }
             );
 
-            if (!response.ok) {
-                throw new Error('Could not check Google connection');
+            const statusData = await statusResponse.json();
+
+            if (!statusResponse.ok) {
+                throw new Error(
+                    statusData.message || 'Could not check Google connection'
+                );
             }
 
-            const data = await response.json();
+            if (statusData.connected) {
+                setConnectingGoogle(false);
+                await exportGoogleDoc();
+                return;
+            }
 
-            setGoogleConnected(data.connected === true);
+            const connectResponse = await fetch(
+                `${API}/export/google/connect`,
+                {
+                    headers: getAuthHeaders(),
+                }
+            );
 
+            const connectData = await connectResponse.json();
+
+            if (!connectResponse.ok || !connectData.url) {
+                throw new Error(
+                    connectData.message || 'Could not connect Google'
+                );
+            }
+
+            window.location.assign(connectData.url);
         } catch (error) {
             console.error('Google connection error:', error);
-            setGoogleConnected(false);
-
-        } finally {
-            setCheckingGoogle(false);
+            alert(error.message || 'Could not connect Google');
+            setConnectingGoogle(false);
         }
     };
+
+    // After OAuth redirects back, automatically create the document.
+    useEffect(() => {
+        if (user?.role !== 'ADMIN' || autoExportStarted.current) {
+            return;
+        }
+
+        const params = new URLSearchParams(window.location.search);
+
+        if (params.get('autoExport') !== '1') {
+            return;
+        }
+
+        autoExportStarted.current = true;
+
+        // Remove OAuth query parameters from the address bar.
+        window.history.replaceState(
+            {},
+            document.title,
+            window.location.pathname
+        );
+
+        exportGoogleDoc();
+    }, [user]);
 
     // Load dashboard data.
     useEffect(() => {
         if (user?.role !== 'ADMIN') {
             setLoading(false);
-            setCheckingGoogle(false);
             return;
         }
 
@@ -134,76 +203,7 @@ export default function Dashboard() {
             })
             .catch(console.error)
             .finally(() => setLoading(false));
-
-        checkGoogleConnection();
-
     }, [user]);
-
-    // Connect Google account.
-    const handleGoogleConnect = async () => {
-        try {
-            setConnectingGoogle(true);
-
-            const response = await fetch(
-                `${API}/export/google/connect`,
-                {
-                    headers: getAuthHeaders(),
-                }
-            );
-
-            const data = await response.json();
-
-            if (!response.ok || !data.url) {
-                throw new Error(
-                    data.message || 'Could not connect Google'
-                );
-            }
-
-            window.location.assign(data.url);
-
-        } catch (error) {
-            console.error('Google connection error:', error);
-
-            alert(error.message || 'Could not connect Google');
-
-            setConnectingGoogle(false);
-        }
-    };
-
-    // Create Google Docs document and redirect to it.
-    const handleGoogleExport = async () => {
-        try {
-            setExporting(true);
-
-            const response = await fetch(
-                `${API}/export/google`,
-                {
-                    method: 'GET',
-                    headers: getAuthHeaders(),
-                }
-            );
-
-            const data = await response.json();
-
-            if (!response.ok || !data.documentUrl) {
-                throw new Error(
-                    data.message || 'Failed to create Google Docs report'
-                );
-            }
-
-            // Redirect directly to the newly created document.
-            window.location.assign(data.documentUrl);
-
-        } catch (error) {
-            console.error('Google Docs export error:', error);
-
-            alert(
-                error.message || 'Could not export dashboard to Google Docs'
-            );
-
-            setExporting(false);
-        }
-    };
 
     const cards = [
         {
@@ -250,11 +250,8 @@ export default function Dashboard() {
 
     return (
         <div className="space-y-8">
-
             {/* Dashboard heading and Google Docs button */}
-
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-
                 <div>
                     <h1 className="text-2xl font-medium tracking-tight text-black">
                         Dashboard Overview
@@ -268,72 +265,24 @@ export default function Dashboard() {
                 </div>
 
                 {user?.role === 'ADMIN' && (
-                    <div className="flex flex-col sm:flex-row gap-2">
-
-                        {checkingGoogle ? (
-                            <button
-                                disabled
-                                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-black rounded-lg text-sm opacity-50"
-                            >
-                                <Loader2 size={16} className="animate-spin" />
-                                Checking Google...
-                            </button>
-
-                        ) : googleConnected ? (
-
-                            <button
-                                onClick={handleGoogleExport}
-                                disabled={exporting || loading}
-                                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                            >
-                                {exporting ? (
-                                    <Loader2 size={16} className="animate-spin" />
-                                ) : (
-                                    <FileText size={16} />
-                                )}
-
-                                {exporting
-                                    ? 'Creating Google Doc...'
-                                    : 'Export to Google Docs'}
-                            </button>
-
+                    <button
+                        onClick={handleGoogleExport}
+                        disabled={exporting || connectingGoogle}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                    >
+                        {exporting || connectingGoogle ? (
+                            <Loader2 size={16} className="animate-spin" />
                         ) : (
-
-                            <button
-                                onClick={handleGoogleConnect}
-                                disabled={connectingGoogle}
-                                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                            >
-                                {connectingGoogle ? (
-                                    <Loader2 size={16} className="animate-spin" />
-                                ) : (
-                                    <FileText size={16} />
-                                )}
-
-                                {connectingGoogle
-                                    ? 'Connecting...'
-                                    : 'Connect Google Account'}
-                            </button>
+                            <FileText size={16} />
                         )}
 
-                    </div>
+                        Export to Google Docs
+                    </button>
                 )}
-
             </div>
 
-            {/* Google connection status */}
-
-            {user?.role === 'ADMIN' && googleConnected && (
-                <div className="flex items-center gap-2 text-sm text-green-700">
-                    <Check size={16} />
-                    Google account is connected.
-                </div>
-            )}
-
             {/* Dashboard statistics */}
-
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-
                 {cards.map((s, i) => {
                     const Icon = s.icon;
 
@@ -358,19 +307,13 @@ export default function Dashboard() {
                         </div>
                     );
                 })}
-
             </div>
 
             {/* Recent orders and stock alerts */}
-
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-
                 {/* Recent orders */}
-
                 <div className="border-2 border-black rounded-lg p-5 bg-white">
-
                     <div className="flex justify-between items-center mb-4 pb-2 border-b border-black/20">
-
                         <h2 className="font-medium text-black">
                             Recent Orders
                         </h2>
@@ -381,21 +324,15 @@ export default function Dashboard() {
                         >
                             View all
                         </Link>
-
                     </div>
 
                     {orders.length === 0 ? (
-
                         <p className="text-sm text-gray-500">
                             No orders recorded yet.
                         </p>
-
                     ) : (
-
                         <div className="divide-y divide-black/10 text-sm">
-
                             {orders.slice(0, 5).map((o) => (
-
                                 <div
                                     key={o.id}
                                     className="py-2.5 flex justify-between items-center"
@@ -412,7 +349,6 @@ export default function Dashboard() {
                                     </div>
 
                                     <div className="text-right">
-
                                         <p className="font-medium text-gray-800">
                                             ${o.total}
                                         </p>
@@ -420,23 +356,16 @@ export default function Dashboard() {
                                         <span className="text-[10px] uppercase font-semibold text-black">
                                             {o.status}
                                         </span>
-
                                     </div>
                                 </div>
-
                             ))}
-
                         </div>
                     )}
-
                 </div>
 
                 {/* Stock alerts */}
-
                 <div className="border-2 border-black rounded-lg p-5 bg-white">
-
                     <div className="flex justify-between items-center mb-4 pb-2 border-b border-black/20">
-
                         <h2 className="font-medium text-black">
                             Stock Alerts
                         </h2>
@@ -447,23 +376,17 @@ export default function Dashboard() {
                         >
                             Manage inventory
                         </Link>
-
                     </div>
 
                     {products.filter((p) => p.Stock <= 5).length === 0 ? (
-
                         <p className="text-sm text-gray-500">
                             All products have sufficient stock.
                         </p>
-
                     ) : (
-
                         <div className="divide-y divide-black/10 text-sm">
-
                             {products
                                 .filter((p) => p.Stock <= 5)
                                 .map((p) => (
-
                                     <div
                                         key={p.id}
                                         className="py-2.5 flex justify-between items-center"
@@ -483,18 +406,12 @@ export default function Dashboard() {
                                                 ? 'Out of stock'
                                                 : `${p.Stock} remaining`}
                                         </span>
-
                                     </div>
-
                                 ))}
-
                         </div>
                     )}
-
                 </div>
-
             </div>
-
         </div>
     );
 }
